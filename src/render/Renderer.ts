@@ -78,6 +78,26 @@ function diamond(g: Graphics, x: number, y: number): Graphics {
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
+/** Deterministic hash of an integer lattice point, in [0, 1). */
+function lattice(x: number, y: number): number {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Smooth value noise in [0, 1]: scenery clumps come from this (never Math.random). */
+function valueNoise(x: number, y: number): number {
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const fx = x - x0;
+  const fy = y - y0;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const a = lattice(x0, y0) + (lattice(x0 + 1, y0) - lattice(x0, y0)) * sx;
+  const b = lattice(x0, y0 + 1) + (lattice(x0 + 1, y0 + 1) - lattice(x0, y0 + 1)) * sx;
+  return a + (b - a) * sy;
+}
+
 export class Renderer {
   private app = new Application();
   private world = new Container();
@@ -393,6 +413,23 @@ export class Renderer {
     const SIDE_DX = [1, 0, -1, 0];
     const SIDE_DY = [0, 1, 0, -1];
 
+    // The middle of a village island belongs to the village: keep trees and rocks out of it.
+    const villageCore = new Map<string, { x: number; y: number; r: number }>();
+    // An island that holds sub-folders gets a lake over its middle (drawn by its own view, translucent while it
+    // fades in), so trees underneath would ghost through it: such islands get no trees at this level.
+    const lakeIslands = new Set<string>();
+    for (const isl of this.islandsOf(v)) {
+      if (!isVillage(isl.child)) lakeIslands.add(isl.child.id);
+      if (!isVillage(isl.child)) continue;
+      const half = (isl.footprint.s * GRID_SIZE) / 2;
+      villageCore.set(isl.child.id, { x: isl.footprint.bx + half, y: isl.footprint.by + half, r: half });
+    }
+
+    let seedH = 0;
+    for (let k = 0; k < v.node.id.length; k++) seedH = (seedH * 31 + v.node.id.charCodeAt(k)) >>> 0;
+    const seedX = (seedH % 997) * 3.17;
+    const seedY = ((seedH >>> 10) % 991) * 2.71;
+
     for (const { i, j, type, water } of cells) {
       if (water) continue;
       const hash = ((Math.imul(i + 1, 73856093) ^ Math.imul(j + 1, 19349663) ^ Math.imul(v.depth + 7, 83492791)) >>> 0) % 1000;
@@ -405,29 +442,41 @@ export class Renderer {
           return Edge.None;
         });
         layer.addChild(this.groundSprite(kit.ground(kind, hash, edges), i, j));
-        // Scenery on inland grass. Bigger things need more room around them, so a narrow strip of
-        // land only gets tufts and rocks and never a tree that would hang over the water.
-        if (kind === 'grass' && type === 'island' && edges.every((e) => e === Edge.None) && hash % 7 === 0) {
-          const roll = Math.floor(hash / 7) % 20;
-          let art = kit.tuft(roll);
-          let widthInTiles = 0.35;
-          if (hash % 91 === 0 && this.grassAround(grid, i, j, 3)) {
-            art = kit.forest;
-            widthInTiles = 2.2;
-          } else if (roll < 5 && this.grassAround(grid, i, j, 2)) {
-            art = kit.pine(roll);
-            widthInTiles = 0.7;
-          } else if (roll < 10) {
-            art = kit.rock(roll);
+        // Scenery on inland grass. Trees grow in clumps: a smooth noise field gives dense groves and open
+        // meadows, and a second, larger field makes whole patches of conifers or leafy trees. A tree needs
+        // grass all around it, so narrow shoreline strips never get one hanging over the water.
+        const core = villageCore.get(grid[j][i].nodeId ?? '');
+        const inVillageCore = !!core && Math.hypot(i + 0.5 - core.x, j + 0.5 - core.y) < core.r * 0.55;
+        const hasLake = lakeIslands.has(grid[j][i].nodeId ?? '');
+        if (kind === 'grass' && type === 'island' && !inVillageCore && !hasLake && edges.every((e) => e === Edge.None)) {
+          const roll = hash / 1000;
+          const grove = valueNoise(i * 0.24 + seedX, j * 0.24 + seedY);
+          const patch = valueNoise(i * 0.11 + seedY, j * 0.11 + seedX);
+          let art: { texture: Texture; aspect: number } | null = null;
+          let widthInTiles = 0.7;
+          if (grove > 0.4 && roll < (grove - 0.28) * 2.2 && this.grassAround(grid, i, j, 1)) {
+            const k = roll < 0.012 ? 'dead' : patch > 0.5 ? 'conifer' : 'leafy';
+            art = kit.tree(k, hash);
+            widthInTiles = 0.7 + ((hash >> 3) % 9) * 0.04; // 0.7 - 1.0 tiles wide
+          } else if (grove > 0.3 && roll > 0.965) {
+            art = kit.tree('bush', hash);
             widthInTiles = 0.42;
+          } else if (hash % 13 === 0) {
+            art = hash % 2 === 0 ? kit.rock(hash) : kit.tuft(hash);
+            widthInTiles = 0.34;
           }
-          const sp = new Sprite(art.texture);
-          sp.anchor.set(0.5, 0.92);
-          sp.width = TILE_W * widthInTiles;
-          sp.height = sp.width / art.aspect;
-          const p = gridToScreen(i + 0.5, j + 0.5);
-          sp.position.set(p.x, p.y + TILE_H * 0.3);
-          decor.push({ gx: i + j, gy: 0, sprite: sp });
+          if (art) {
+            const sp = new Sprite(art.texture);
+            sp.anchor.set(0.5, 0.94);
+            sp.width = TILE_W * widthInTiles;
+            sp.height = sp.width / art.aspect;
+            if (hash % 2 === 1) sp.scale.x = -sp.scale.x; // mirror half of them: same tree, different look
+            const shade = 232 + ((hash >> 5) % 24); // slight brightness variation
+            sp.tint = (shade << 16) | (shade << 8) | shade;
+            const p = gridToScreen(i + 0.5 + (((hash >> 2) % 5) - 2) * 0.06, j + 0.5 + (((hash >> 4) % 5) - 2) * 0.06);
+            sp.position.set(p.x, p.y + TILE_H * 0.3);
+            decor.push({ gx: i + j, gy: 0, sprite: sp });
+          }
         }
       } else if (type === 'coral') {
         const id = grid[j][i].nodeId;

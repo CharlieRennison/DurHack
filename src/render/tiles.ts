@@ -48,7 +48,7 @@ function loadImage(name: string): Promise<HTMLImageElement> {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error('Could not load ' + name));
-    img.src = BASE + name;
+    img.src = name.startsWith('/') ? name : BASE + name;
   });
 }
 
@@ -117,11 +117,6 @@ interface Crop {
  */
 const VILLAGE_CROP: Crop = { x: 60, y: 85, w: 1150, h: 1045 };
 const HUT_SRC_W = 1254;
-/** Trees overlap in the art, so only the two pines that can be cut out cleanly are used as single trees. */
-const PINE_CROPS: Crop[] = [
-  { x: 255, y: 240, w: 240, h: 370 }, // pine, left
-  { x: 1130, y: 295, w: 245, h: 400 }, // pine, right
-];
 /** Rocks and grass tufts in the tree art are isolated objects: free variety for the grass. */
 const ROCK_CROPS: Crop[] = [
   { x: 125, y: 495, w: 130, h: 90 },
@@ -134,8 +129,6 @@ const TUFT_CROPS: Crop[] = [
   { x: 1335, y: 605, w: 95, h: 65 },
   { x: 1180, y: 715, w: 80, h: 70 },
 ];
-/** The whole cluster, used as an occasional forest patch. */
-const FOREST_CROP: Crop = { x: 130, y: 0, w: 1290, h: 1000 };
 const TREE_SRC_W = 1536;
 
 export interface Sprite3D {
@@ -163,10 +156,9 @@ export class TileKit {
   private coralStraight: HTMLCanvasElement;
   private coralCorner: HTMLCanvasElement;
   private villageSprite: Sprite3D;
-  private pines: Sprite3D[] = [];
   private rocks: Sprite3D[] = [];
   private tufts: Sprite3D[] = [];
-  private forestSprite: Sprite3D;
+  private treeSets: Record<TreeKind, Sprite3D[]>;
 
   constructor(img: Record<string, HTMLImageElement>) {
     this.water = Texture.from(img.water);
@@ -222,10 +214,10 @@ export class TileKit {
     const treeTex = Texture.from(treeSheet);
     this.villageSprite = cropTexture(hutTex, hutSheet.width / HUT_SRC_W, VILLAGE_CROP);
     const ts = treeSheet.width / TREE_SRC_W;
-    this.pines = PINE_CROPS.map((r) => cropTexture(treeTex, ts, r));
     this.rocks = ROCK_CROPS.map((r) => cropTexture(treeTex, ts, r));
     this.tufts = TUFT_CROPS.map((r) => cropTexture(treeTex, ts, r));
-    this.forestSprite = cropTexture(treeTex, ts, FOREST_CROP);
+    // Trees: the sheet of single trees on magenta is keyed out and cut into separate sprites.
+    this.treeSets = sliceTreeSheet(img.tree_sheet);
 
     this.atlasTex = Texture.from(this.atlas.c);
   }
@@ -323,17 +315,19 @@ export class TileKit {
   get village(): Sprite3D {
     return this.villageSprite;
   }
-  pine(variant: number): Sprite3D {
-    return this.pines[variant % this.pines.length];
-  }
   rock(variant: number): Sprite3D {
     return this.rocks[variant % this.rocks.length];
   }
   tuft(variant: number): Sprite3D {
     return this.tufts[variant % this.tufts.length];
   }
-  get forest(): Sprite3D {
-    return this.forestSprite;
+  /** A tree of the given kind; `variant` picks one deterministically (any integer). */
+  tree(kind: TreeKind, variant: number): Sprite3D {
+    const set = this.treeSets[kind];
+    return set[((variant % set.length) + set.length) % set.length];
+  }
+  treeCount(kind: TreeKind): number {
+    return this.treeSets[kind].length;
   }
 
   /** Re-upload the atlas if new tiles were composed since the last call. */
@@ -385,6 +379,112 @@ function cleanSprite(img: HTMLImageElement): HTMLCanvasElement {
   return c;
 }
 
+export type TreeKind = 'conifer' | 'leafy' | 'bush' | 'dead';
+
+/**
+ * Cut the tree sheet (trees laid out on a flat magenta background) into single sprites:
+ *  1. key the magenta out (it is far from any foliage or bark colour), soften the edge, remove magenta spill;
+ *  2. find each tree as a connected blob of solid pixels (robust: no assumptions that the grid is regular);
+ *  3. classify by where the blob sits in the sheet's layout, and pack all of them into one atlas texture.
+ */
+function sliceTreeSheet(img: HTMLImageElement): Record<TreeKind, Sprite3D[]> {
+  const w = img.width;
+  const h = img.height;
+  const { c, g } = canvas(w, h);
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, w, h);
+  const px = d.data;
+  const solid = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const r = px[i * 4];
+    const gr = px[i * 4 + 1];
+    const b = px[i * 4 + 2];
+    const magenta = Math.min(r, b) - gr; // ~250 on the background, below ~60 on trees
+    const a = 1 - Math.min(1, Math.max(0, (magenta - 90) / 60));
+    if (magenta > 30 && a > 0) {
+      const spill = (magenta - 30) * 0.8; // pull magenta out of the blended edge pixels
+      px[i * 4] = Math.max(0, r - spill);
+      px[i * 4 + 2] = Math.max(0, b - spill);
+    }
+    px[i * 4 + 3] = Math.round(a * 255);
+    solid[i] = a > 0.5 ? 1 : 0;
+  }
+  g.putImageData(d, 0, 0);
+
+  // connected components (4-neighbour flood fill)
+  const seen = new Uint8Array(w * h);
+  const stack: number[] = [];
+  const blobs: { x0: number; x1: number; y0: number; y1: number; cx: number; cy: number }[] = [];
+  for (let start = 0; start < w * h; start++) {
+    if (!solid[start] || seen[start]) continue;
+    let x0 = w, x1 = 0, y0 = h, y1 = 0, n = 0, sx = 0, sy = 0;
+    stack.push(start);
+    seen[start] = 1;
+    while (stack.length) {
+      const p = stack.pop()!;
+      const x = p % w;
+      const y = (p / w) | 0;
+      n++; sx += x; sy += y;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      for (const q of [p - 1, p + 1, p - w, p + w]) {
+        if (q < 0 || q >= w * h || seen[q] || !solid[q]) continue;
+        if ((q === p - 1 && x === 0) || (q === p + 1 && x === w - 1)) continue;
+        seen[q] = 1;
+        stack.push(q);
+      }
+    }
+    if (n >= 400) blobs.push({ x0, x1, y0, y1, cx: sx / n, cy: sy / n });
+  }
+
+  // The sheet is 5 rows (uneven heights) by 10 columns: row = which band the blob's centre is in.
+  const rowEdges = [0.332, 0.501, 0.668, 0.833];
+  const rowOf = (cy: number) => rowEdges.filter((e) => cy / h > e).length;
+  const colOf = (cx: number) => Math.min(9, Math.max(0, Math.floor((cx / w - 0.0107) / 0.0979)));
+  const kindOf = (cx: number, cy: number): TreeKind => {
+    const r = rowOf(cy);
+    const col = colOf(cx);
+    if (r === 4) return col <= 4 ? 'bush' : 'dead';
+    if ((r === 0 && col <= 5) || (r === 1 && col <= 4)) return 'conifer';
+    return 'leafy';
+  };
+  blobs.sort((a, b) => rowOf(a.cy) - rowOf(b.cy) || a.cx - b.cx);
+
+  // pack into one atlas (shelf packing) so all trees share a single texture
+  const AW = 1536;
+  const AH = 1024;
+  const atlas = canvas(AW, AH);
+  let x = 1;
+  let y = 1;
+  let rowH = 0;
+  const placed: { kind: TreeKind; frame: Rectangle }[] = [];
+  for (const b of blobs) {
+    const bw = b.x1 - b.x0 + 1;
+    const bh = b.y1 - b.y0 + 1;
+    if (x + bw + 1 > AW) {
+      x = 1;
+      y += rowH + 1;
+      rowH = 0;
+    }
+    if (y + bh + 1 > AH) throw new Error('tree atlas is full');
+    atlas.g.drawImage(c, b.x0, b.y0, bw, bh, x, y, bw, bh);
+    placed.push({ kind: kindOf(b.cx, b.cy), frame: new Rectangle(x, y, bw, bh) });
+    x += bw + 1;
+    rowH = Math.max(rowH, bh);
+  }
+  const base = Texture.from(atlas.c);
+  const out: Record<TreeKind, Sprite3D[]> = { conifer: [], leafy: [], bush: [], dead: [] };
+  for (const p of placed) {
+    out[p.kind].push({ texture: new Texture({ source: base.source, frame: p.frame }), aspect: p.frame.width / p.frame.height });
+  }
+  for (const k of ['conifer', 'leafy', 'bush', 'dead'] as const) {
+    if (out[k].length === 0) throw new Error('tree sheet: no ' + k + ' trees found');
+  }
+  return out;
+}
+
 function cropTexture(sheet: Texture, scale: number, r: Crop): Sprite3D {
   const w = Math.round(r.w * scale);
   const h = Math.round(r.h * scale);
@@ -396,6 +496,9 @@ function cropTexture(sheet: Texture, scale: number, r: Crop): Sprite3D {
 
 export async function loadTileKit(): Promise<TileKit> {
   const names = ['grass', 'sand', 'water', 'sand_grass', 'sand_water', 'coral_straight', 'coral_corner', 'huts', 'trees'];
-  const imgs = await Promise.all(names.map((n) => loadImage(n + '.png')));
-  return new TileKit(Object.fromEntries(names.map((n, i) => [n, imgs[i]])));
+  const [imgs, treeSheet] = await Promise.all([
+    Promise.all(names.map((n) => loadImage(n + '.png'))),
+    loadImage('/assets/trees/trees-sheet.jpg'),
+  ]);
+  return new TileKit({ ...Object.fromEntries(names.map((n, i) => [n, imgs[i]])), tree_sheet: treeSheet });
 }

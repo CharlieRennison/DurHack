@@ -90,12 +90,10 @@ A tile with `nodeId` is zoomable into that node.
 
 ## Commands
 
-(Filled in once the scaffold exists.)
-
 - `npm install`
-- `npm run dev` starts the Vite dev server
-- `npm run build` production build
-- `npm test` unit tests
+- `npm run dev` starts the Vite dev server (http://localhost:5173)
+- `npm run build` type-checks (`tsc --noEmit`) then production build to `dist/`
+- `npm test` runs vitest once (`vitest run`)
 
 ## Build order / priorities
 

@@ -1,0 +1,20 @@
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0b2a4a; font-family: system-ui, sans-serif; }
+#canvas-host { position: fixed; inset: 0; }
+#canvas-host canvas { display: block; cursor: grab; }
+#overlay { position: fixed; inset: 0; pointer-events: none; color: #fff; }
+#breadcrumb {
+  position: absolute; top: 12px; left: 12px; padding: 6px 10px;
+  background: rgba(10, 20, 35, 0.8); border-radius: 6px; pointer-events: auto;
+  font-size: 14px;
+}
+#breadcrumb button {
+  background: none; border: none; color: #8fd0ff; cursor: pointer; font: inherit; padding: 0 2px;
+}
+#breadcrumb button:hover { text-decoration: underline; }
+#breadcrumb .current { color: #fff; font-weight: 600; }
+#breadcrumb .sep { opacity: 0.5; margin: 0 4px; }
+#inspect {
+  position: absolute; bottom: 12px; left: 12px; min-width: 180px; padding: 8px 12px;
+  background: rgba(10, 20, 35, 0.8); border-radius: 6px; font-size: 13px; line-height: 1.5;
+}
+#inspect .dim { opacity: 0.6; }

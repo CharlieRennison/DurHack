@@ -1,0 +1,602 @@
+{
+  "id": "demo-repo",
+  "kind": "folder",
+  "name": "demo-repo",
+  "path": "demo-repo",
+  "size": 3570,
+  "children": [
+    {
+      "id": "demo-repo/src",
+      "kind": "folder",
+      "name": "src",
+      "path": "demo-repo/src",
+      "size": 1385,
+      "children": [
+        {
+          "id": "demo-repo/src/api",
+          "kind": "folder",
+          "name": "api",
+          "path": "demo-repo/src/api",
+          "size": 670,
+          "children": [
+            {
+              "id": "demo-repo/src/api/client.ts",
+              "kind": "file",
+              "name": "client.ts",
+              "path": "demo-repo/src/api/client.ts",
+              "size": 220,
+              "children": [
+                {
+                  "id": "demo-repo/src/api/client.ts#fetchRepo",
+                  "kind": "function",
+                  "name": "fetchRepo",
+                  "path": "demo-repo/src/api/client.ts#fetchRepo",
+                  "size": 40,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/src/api/client.ts#parseResponse",
+                  "kind": "function",
+                  "name": "parseResponse",
+                  "path": "demo-repo/src/api/client.ts#parseResponse",
+                  "size": 25,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/src/api/client.ts#retry",
+                  "kind": "function",
+                  "name": "retry",
+                  "path": "demo-repo/src/api/client.ts#retry",
+                  "size": 18,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "demo-repo/src/api/auth.ts",
+              "kind": "file",
+              "name": "auth.ts",
+              "path": "demo-repo/src/api/auth.ts",
+              "size": 140,
+              "children": [
+                {
+                  "id": "demo-repo/src/api/auth.ts#login",
+                  "kind": "function",
+                  "name": "login",
+                  "path": "demo-repo/src/api/auth.ts#login",
+                  "size": 30,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/src/api/auth.ts#refreshToken",
+                  "kind": "function",
+                  "name": "refreshToken",
+                  "path": "demo-repo/src/api/auth.ts#refreshToken",
+                  "size": 22,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "demo-repo/src/api/routes.ts",
+              "kind": "file",
+              "name": "routes.ts",
+              "path": "demo-repo/src/api/routes.ts",
+              "size": 310,
+              "children": [
+                {
+                  "id": "demo-repo/src/api/routes.ts#registerRoutes",
+                  "kind": "function",
+                  "name": "registerRoutes",
+                  "path": "demo-repo/src/api/routes.ts#registerRoutes",
+                  "size": 60,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/src/api/routes.ts#handleError",
+                  "kind": "function",
+                  "name": "handleError",
+                  "path": "demo-repo/src/api/routes.ts#handleError",
+                  "size": 20,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "demo-repo/src/components",
+          "kind": "folder",
+          "name": "components",
+          "path": "demo-repo/src/components",
+          "size": 540,
+          "children": [
+            {
+              "id": "demo-repo/src/components/Button.tsx",
+              "kind": "file",
+              "name": "Button.tsx",
+              "path": "demo-repo/src/components/Button.tsx",
+              "size": 90,
+              "children": [
+                {
+                  "id": "demo-repo/src/components/Button.tsx#Button",
+                  "kind": "function",
+                  "name": "Button",
+                  "path": "demo-repo/src/components/Button.tsx#Button",
+                  "size": 30,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "demo-repo/src/components/Modal.tsx",
+              "kind": "file",
+              "name": "Modal.tsx",
+              "path": "demo-repo/src/components/Modal.tsx",
+              "size": 180,
+              "children": [
+                {
+                  "id": "demo-repo/src/components/Modal.tsx#Modal",
+                  "kind": "function",
+                  "name": "Modal",
+                  "path": "demo-repo/src/components/Modal.tsx#Modal",
+                  "size": 50,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/src/components/Modal.tsx#useFocusTrap",
+                  "kind": "function",
+                  "name": "useFocusTrap",
+                  "path": "demo-repo/src/components/Modal.tsx#useFocusTrap",
+                  "size": 25,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "demo-repo/src/components/forms",
+              "kind": "folder",
+              "name": "forms",
+              "path": "demo-repo/src/components/forms",
+              "size": 270,
+              "children": [
+                {
+                  "id": "demo-repo/src/components/forms/Input.tsx",
+                  "kind": "file",
+                  "name": "Input.tsx",
+                  "path": "demo-repo/src/components/forms/Input.tsx",
+                  "size": 120,
+                  "children": [
+                    {
+                      "id": "demo-repo/src/components/forms/Input.tsx#Input",
+                      "kind": "function",
+                      "name": "Input",
+                      "path": "demo-repo/src/components/forms/Input.tsx#Input",
+                      "size": 35,
+                      "children": []
+                    },
+                    {
+                      "id": "demo-repo/src/components/forms/Input.tsx#validate",
+                      "kind": "function",
+                      "name": "validate",
+                      "path": "demo-repo/src/components/forms/Input.tsx#validate",
+                      "size": 20,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "id": "demo-repo/src/components/forms/Select.tsx",
+                  "kind": "file",
+                  "name": "Select.tsx",
+                  "path": "demo-repo/src/components/forms/Select.tsx",
+                  "size": 150,
+                  "children": [
+                    {
+                      "id": "demo-repo/src/components/forms/Select.tsx#Select",
+                      "kind": "function",
+                      "name": "Select",
+                      "path": "demo-repo/src/components/forms/Select.tsx#Select",
+                      "size": 40,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "demo-repo/src/utils",
+          "kind": "folder",
+          "name": "utils",
+          "path": "demo-repo/src/utils",
+          "size": 135,
+          "children": [
+            {
+              "id": "demo-repo/src/utils/math.ts",
+              "kind": "file",
+              "name": "math.ts",
+              "path": "demo-repo/src/utils/math.ts",
+              "size": 75,
+              "children": [
+                {
+                  "id": "demo-repo/src/utils/math.ts#clamp",
+                  "kind": "function",
+                  "name": "clamp",
+                  "path": "demo-repo/src/utils/math.ts#clamp",
+                  "size": 8,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/src/utils/math.ts#lerp",
+                  "kind": "function",
+                  "name": "lerp",
+                  "path": "demo-repo/src/utils/math.ts#lerp",
+                  "size": 8,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/src/utils/math.ts#smoothstep",
+                  "kind": "function",
+                  "name": "smoothstep",
+                  "path": "demo-repo/src/utils/math.ts#smoothstep",
+                  "size": 12,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "demo-repo/src/utils/strings.ts",
+              "kind": "file",
+              "name": "strings.ts",
+              "path": "demo-repo/src/utils/strings.ts",
+              "size": 60,
+              "children": [
+                {
+                  "id": "demo-repo/src/utils/strings.ts#slugify",
+                  "kind": "function",
+                  "name": "slugify",
+                  "path": "demo-repo/src/utils/strings.ts#slugify",
+                  "size": 14,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/src/utils/strings.ts#truncate",
+                  "kind": "function",
+                  "name": "truncate",
+                  "path": "demo-repo/src/utils/strings.ts#truncate",
+                  "size": 10,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "demo-repo/src/index.ts",
+          "kind": "file",
+          "name": "index.ts",
+          "path": "demo-repo/src/index.ts",
+          "size": 40,
+          "children": [
+            {
+              "id": "demo-repo/src/index.ts#main",
+              "kind": "function",
+              "name": "main",
+              "path": "demo-repo/src/index.ts#main",
+              "size": 20,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo-repo/docs",
+      "kind": "folder",
+      "name": "docs",
+      "path": "demo-repo/docs",
+      "size": 880,
+      "children": [
+        {
+          "id": "demo-repo/docs/README.md",
+          "kind": "file",
+          "name": "README.md",
+          "path": "demo-repo/docs/README.md",
+          "size": 300,
+          "children": []
+        },
+        {
+          "id": "demo-repo/docs/CONTRIBUTING.md",
+          "kind": "file",
+          "name": "CONTRIBUTING.md",
+          "path": "demo-repo/docs/CONTRIBUTING.md",
+          "size": 120,
+          "children": []
+        },
+        {
+          "id": "demo-repo/docs/guides",
+          "kind": "folder",
+          "name": "guides",
+          "path": "demo-repo/docs/guides",
+          "size": 460,
+          "children": [
+            {
+              "id": "demo-repo/docs/guides/getting-started.md",
+              "kind": "file",
+              "name": "getting-started.md",
+              "path": "demo-repo/docs/guides/getting-started.md",
+              "size": 200,
+              "children": []
+            },
+            {
+              "id": "demo-repo/docs/guides/architecture.md",
+              "kind": "file",
+              "name": "architecture.md",
+              "path": "demo-repo/docs/guides/architecture.md",
+              "size": 260,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo-repo/packages",
+      "kind": "folder",
+      "name": "packages",
+      "path": "demo-repo/packages",
+      "size": 1250,
+      "children": [
+        {
+          "id": "demo-repo/packages/core",
+          "kind": "folder",
+          "name": "core",
+          "path": "demo-repo/packages/core",
+          "size": 850,
+          "children": [
+            {
+              "id": "demo-repo/packages/core/engine.py",
+              "kind": "file",
+              "name": "engine.py",
+              "path": "demo-repo/packages/core/engine.py",
+              "size": 500,
+              "children": [
+                {
+                  "id": "demo-repo/packages/core/engine.py#run",
+                  "kind": "function",
+                  "name": "run",
+                  "path": "demo-repo/packages/core/engine.py#run",
+                  "size": 80,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/packages/core/engine.py#step",
+                  "kind": "function",
+                  "name": "step",
+                  "path": "demo-repo/packages/core/engine.py#step",
+                  "size": 60,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/packages/core/engine.py#reset",
+                  "kind": "function",
+                  "name": "reset",
+                  "path": "demo-repo/packages/core/engine.py#reset",
+                  "size": 15,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "demo-repo/packages/core/config.py",
+              "kind": "file",
+              "name": "config.py",
+              "path": "demo-repo/packages/core/config.py",
+              "size": 110,
+              "children": [
+                {
+                  "id": "demo-repo/packages/core/config.py#load_config",
+                  "kind": "function",
+                  "name": "load_config",
+                  "path": "demo-repo/packages/core/config.py#load_config",
+                  "size": 30,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "demo-repo/packages/core/plugins",
+              "kind": "folder",
+              "name": "plugins",
+              "path": "demo-repo/packages/core/plugins",
+              "size": 240,
+              "children": [
+                {
+                  "id": "demo-repo/packages/core/plugins/builtin",
+                  "kind": "folder",
+                  "name": "builtin",
+                  "path": "demo-repo/packages/core/plugins/builtin",
+                  "size": 240,
+                  "children": [
+                    {
+                      "id": "demo-repo/packages/core/plugins/builtin/extra",
+                      "kind": "folder",
+                      "name": "extra",
+                      "path": "demo-repo/packages/core/plugins/builtin/extra",
+                      "size": 150,
+                      "children": [
+                        {
+                          "id": "demo-repo/packages/core/plugins/builtin/extra/deep",
+                          "kind": "folder",
+                          "name": "deep",
+                          "path": "demo-repo/packages/core/plugins/builtin/extra/deep",
+                          "size": 150,
+                          "children": [
+                            {
+                              "id": "demo-repo/packages/core/plugins/builtin/extra/deep/hidden.py",
+                              "kind": "file",
+                              "name": "hidden.py",
+                              "path": "demo-repo/packages/core/plugins/builtin/extra/deep/hidden.py",
+                              "size": 70,
+                              "children": [
+                                {
+                                  "id": "demo-repo/packages/core/plugins/builtin/extra/deep/hidden.py#secret",
+                                  "kind": "function",
+                                  "name": "secret",
+                                  "path": "demo-repo/packages/core/plugins/builtin/extra/deep/hidden.py#secret",
+                                  "size": 12,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "id": "demo-repo/packages/core/plugins/builtin/extra/deep/more.py",
+                              "kind": "file",
+                              "name": "more.py",
+                              "path": "demo-repo/packages/core/plugins/builtin/extra/deep/more.py",
+                              "size": 50,
+                              "children": [
+                                {
+                                  "id": "demo-repo/packages/core/plugins/builtin/extra/deep/more.py#helper",
+                                  "kind": "function",
+                                  "name": "helper",
+                                  "path": "demo-repo/packages/core/plugins/builtin/extra/deep/more.py#helper",
+                                  "size": 9,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "id": "demo-repo/packages/core/plugins/builtin/extra/deep/deeper",
+                              "kind": "folder",
+                              "name": "deeper",
+                              "path": "demo-repo/packages/core/plugins/builtin/extra/deep/deeper",
+                              "size": 30,
+                              "children": [
+                                {
+                                  "id": "demo-repo/packages/core/plugins/builtin/extra/deep/deeper/bottom.py",
+                                  "kind": "file",
+                                  "name": "bottom.py",
+                                  "path": "demo-repo/packages/core/plugins/builtin/extra/deep/deeper/bottom.py",
+                                  "size": 30,
+                                  "children": [
+                                    {
+                                      "id": "demo-repo/packages/core/plugins/builtin/extra/deep/deeper/bottom.py#floor",
+                                      "kind": "function",
+                                      "name": "floor",
+                                      "path": "demo-repo/packages/core/plugins/builtin/extra/deep/deeper/bottom.py#floor",
+                                      "size": 5,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "id": "demo-repo/packages/core/plugins/builtin/logger.py",
+                      "kind": "file",
+                      "name": "logger.py",
+                      "path": "demo-repo/packages/core/plugins/builtin/logger.py",
+                      "size": 90,
+                      "children": [
+                        {
+                          "id": "demo-repo/packages/core/plugins/builtin/logger.py#log",
+                          "kind": "function",
+                          "name": "log",
+                          "path": "demo-repo/packages/core/plugins/builtin/logger.py#log",
+                          "size": 10,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "demo-repo/packages/cli",
+          "kind": "folder",
+          "name": "cli",
+          "path": "demo-repo/packages/cli",
+          "size": 400,
+          "children": [
+            {
+              "id": "demo-repo/packages/cli/main.py",
+              "kind": "file",
+              "name": "main.py",
+              "path": "demo-repo/packages/cli/main.py",
+              "size": 160,
+              "children": [
+                {
+                  "id": "demo-repo/packages/cli/main.py#main",
+                  "kind": "function",
+                  "name": "main",
+                  "path": "demo-repo/packages/cli/main.py#main",
+                  "size": 40,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/packages/cli/main.py#parse_args",
+                  "kind": "function",
+                  "name": "parse_args",
+                  "path": "demo-repo/packages/cli/main.py#parse_args",
+                  "size": 25,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "demo-repo/packages/cli/commands.py",
+              "kind": "file",
+              "name": "commands.py",
+              "path": "demo-repo/packages/cli/commands.py",
+              "size": 240,
+              "children": [
+                {
+                  "id": "demo-repo/packages/cli/commands.py#build",
+                  "kind": "function",
+                  "name": "build",
+                  "path": "demo-repo/packages/cli/commands.py#build",
+                  "size": 45,
+                  "children": []
+                },
+                {
+                  "id": "demo-repo/packages/cli/commands.py#serve",
+                  "kind": "function",
+                  "name": "serve",
+                  "path": "demo-repo/packages/cli/commands.py#serve",
+                  "size": 38,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo-repo/package.json",
+      "kind": "file",
+      "name": "package.json",
+      "path": "demo-repo/package.json",
+      "size": 35,
+      "children": []
+    },
+    {
+      "id": "demo-repo/LICENSE",
+      "kind": "file",
+      "name": "LICENSE",
+      "path": "demo-repo/LICENSE",
+      "size": 20,
+      "children": []
+    }
+  ]
+}

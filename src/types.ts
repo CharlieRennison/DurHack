@@ -33,5 +33,5 @@ export interface Tile {
 /** layout -> render. Indexed grid[y][x]. */
 export type Grid = Tile[][];
 
-export const GRID_SIZE = 32;
+export const GRID_SIZE = 48;
 export const MAX_ISLAND_DEPTH = 4;

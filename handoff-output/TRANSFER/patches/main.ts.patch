@@ -1,0 +1,22 @@
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -1,16 +1,12 @@
++import { indexNodes, loadDefaultRoot } from './data';
+ import { layoutNode } from './layout/layoutNode';
+ import { Renderer } from './render/Renderer';
+ import { renderBreadcrumb, renderInspect } from './ui/panels';
+ import type { RepoNode } from './types';
+ 
+ async function main(): Promise<void> {
+-  const root: RepoNode = await (await fetch('/demo/mock.json')).json();
+-  const byId = new Map<string, RepoNode>();
+-  const index = (n: RepoNode) => {
+-    byId.set(n.id, n);
+-    n.children.forEach(index);
+-  };
+-  index(root);
++  const root = await loadDefaultRoot();
++  const byId = indexNodes(root);
+ 
+   const breadcrumb = document.getElementById('breadcrumb')!;
+   const inspect = document.getElementById('inspect')!;

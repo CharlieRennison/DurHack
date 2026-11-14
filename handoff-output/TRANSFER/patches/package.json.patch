@@ -1,0 +1,20 @@
+--- a/package.json
++++ b/package.json
+@@ -6,13 +6,16 @@
+   "scripts": {
+     "dev": "vite",
+     "build": "tsc --noEmit && vite build",
+-    "test": "vitest run"
++    "test": "vitest run",
++    "fetch-repo": "tsx src/data/cli/fetch-repo.ts"
+   },
+   "dependencies": {
+     "pixi.js": "^8.23.0",
+     "simplex-noise": "^4.0.3"
+   },
+   "devDependencies": {
++    "@types/node": "^26.6.6",
++    "tsx": "^4.23.15",
+     "typescript": "^7.0.2",
+     "vite": "^8.3.8",
+     "vitest": "^5.1.0"

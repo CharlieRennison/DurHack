@@ -1,0 +1,1273 @@
+{
+  "id": "root",
+  "kind": "folder",
+  "name": "is",
+  "path": "",
+  "size": 6554,
+  "children": [
+    {
+      "id": "test",
+      "kind": "folder",
+      "name": "test",
+      "path": "test",
+      "size": 3239,
+      "children": [
+        {
+          "id": "test/test.ts",
+          "kind": "file",
+          "name": "test.ts",
+          "path": "test/test.ts",
+          "size": 2822,
+          "children": [
+            {
+              "id": "test/test.ts#getNumberOrStringRandomly",
+              "kind": "function",
+              "name": "getNumberOrStringRandomly",
+              "path": "test/test.ts#getNumberOrStringRandomly",
+              "size": 9,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#assertThrowsTypeErrorWithMessage",
+              "kind": "function",
+              "name": "assertThrowsTypeErrorWithMessage",
+              "path": "test/test.ts#assertThrowsTypeErrorWithMessage",
+              "size": 8,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#canUseOnlyNumber",
+              "kind": "function",
+              "name": "canUseOnlyNumber",
+              "path": "test/test.ts#canUseOnlyNumber",
+              "size": 7,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#fixture:912",
+              "kind": "function",
+              "name": "fixture",
+              "path": "test/test.ts#fixture:912",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1126",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1126",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1134",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1134",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1142",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1142",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1150",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1150",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1158",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1158",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1166",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1166",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1212",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1212",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1220",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1220",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1222",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1222",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1230",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1230",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1232",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1232",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1240",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1240",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1248",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1248",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1257",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1257",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1747",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1747",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1757",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1757",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1767",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1767",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1778",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1778",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1788",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1788",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#_:1798",
+              "kind": "function",
+              "name": "_",
+              "path": "test/test.ts#_:1798",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#fixture:892",
+              "kind": "function",
+              "name": "fixture",
+              "path": "test/test.ts#fixture:892",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#foo",
+              "kind": "function",
+              "name": "foo",
+              "path": "test/test.ts#foo",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#functionWithProperty",
+              "kind": "function",
+              "name": "functionWithProperty",
+              "path": "test/test.ts#functionWithProperty",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1124",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1124",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1132",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1132",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1140",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1140",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1148",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1148",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1156",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1156",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1164",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1164",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1210",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1210",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1218",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1218",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1228",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1228",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1238",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1238",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1246",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1246",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1255",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1255",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1743",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1743",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1753",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1753",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1763",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1763",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1773",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1773",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1783",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1783",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "test/test.ts#function_:1793",
+              "kind": "function",
+              "name": "function_",
+              "path": "test/test.ts#function_:1793",
+              "size": 1,
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "test/type-tests.ts",
+          "kind": "file",
+          "name": "type-tests.ts",
+          "path": "test/type-tests.ts",
+          "size": 405,
+          "children": [
+            {
+              "id": "test/type-tests.ts#positiveIntegerCheck",
+              "kind": "function",
+              "name": "positiveIntegerCheck",
+              "path": "test/type-tests.ts#positiveIntegerCheck",
+              "size": 9,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#validLengthCheck",
+              "kind": "function",
+              "name": "validLengthCheck",
+              "path": "test/type-tests.ts#validLengthCheck",
+              "size": 9,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#evenIntegerCheck",
+              "kind": "function",
+              "name": "evenIntegerCheck",
+              "path": "test/type-tests.ts#evenIntegerCheck",
+              "size": 8,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#infiniteCheck",
+              "kind": "function",
+              "name": "infiniteCheck",
+              "path": "test/type-tests.ts#infiniteCheck",
+              "size": 8,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#integerCheck",
+              "kind": "function",
+              "name": "integerCheck",
+              "path": "test/type-tests.ts#integerCheck",
+              "size": 8,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#negativeIntegerCheck",
+              "kind": "function",
+              "name": "negativeIntegerCheck",
+              "path": "test/type-tests.ts#negativeIntegerCheck",
+              "size": 8,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#nonNegativeIntegerCheck",
+              "kind": "function",
+              "name": "nonNegativeIntegerCheck",
+              "path": "test/type-tests.ts#nonNegativeIntegerCheck",
+              "size": 8,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#oddIntegerCheck",
+              "kind": "function",
+              "name": "oddIntegerCheck",
+              "path": "test/type-tests.ts#oddIntegerCheck",
+              "size": 8,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#positiveNumberCheck",
+              "kind": "function",
+              "name": "positiveNumberCheck",
+              "path": "test/type-tests.ts#positiveNumberCheck",
+              "size": 8,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#safeIntegerCheck",
+              "kind": "function",
+              "name": "safeIntegerCheck",
+              "path": "test/type-tests.ts#safeIntegerCheck",
+              "size": 8,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#chainedNumericGuardCheck",
+              "kind": "function",
+              "name": "chainedNumericGuardCheck",
+              "path": "test/type-tests.ts#chainedNumericGuardCheck",
+              "size": 7,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#finiteNumberCheck",
+              "kind": "function",
+              "name": "finiteNumberCheck",
+              "path": "test/type-tests.ts#finiteNumberCheck",
+              "size": 7,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#integerMixedUnionCheck",
+              "kind": "function",
+              "name": "integerMixedUnionCheck",
+              "path": "test/type-tests.ts#integerMixedUnionCheck",
+              "size": 7,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#nanCheck",
+              "kind": "function",
+              "name": "nanCheck",
+              "path": "test/type-tests.ts#nanCheck",
+              "size": 7,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#negativeNumberCheck",
+              "kind": "function",
+              "name": "negativeNumberCheck",
+              "path": "test/type-tests.ts#negativeNumberCheck",
+              "size": 7,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#nonNegativeNumberCheck",
+              "kind": "function",
+              "name": "nonNegativeNumberCheck",
+              "path": "test/type-tests.ts#nonNegativeNumberCheck",
+              "size": 7,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#positiveNumberMixedUnionCheck",
+              "kind": "function",
+              "name": "positiveNumberMixedUnionCheck",
+              "path": "test/type-tests.ts#positiveNumberMixedUnionCheck",
+              "size": 7,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#integerUnknownCheck",
+              "kind": "function",
+              "name": "integerUnknownCheck",
+              "path": "test/type-tests.ts#integerUnknownCheck",
+              "size": 6,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#positiveIntegerUnknownCheck",
+              "kind": "function",
+              "name": "positiveIntegerUnknownCheck",
+              "path": "test/type-tests.ts#positiveIntegerUnknownCheck",
+              "size": 6,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotBlobDoesNotExistCheck",
+              "kind": "function",
+              "name": "assertNotBlobDoesNotExistCheck",
+              "path": "test/type-tests.ts#assertNotBlobDoesNotExistCheck",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotCallableDoesNotExistCheck",
+              "kind": "function",
+              "name": "assertNotCallableDoesNotExistCheck",
+              "path": "test/type-tests.ts#assertNotCallableDoesNotExistCheck",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotDateDoesNotExistCheck",
+              "kind": "function",
+              "name": "assertNotDateDoesNotExistCheck",
+              "path": "test/type-tests.ts#assertNotDateDoesNotExistCheck",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotIntegerDoesNotExistCheck",
+              "kind": "function",
+              "name": "assertNotIntegerDoesNotExistCheck",
+              "path": "test/type-tests.ts#assertNotIntegerDoesNotExistCheck",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotMapDoesNotExistCheck",
+              "kind": "function",
+              "name": "assertNotMapDoesNotExistCheck",
+              "path": "test/type-tests.ts#assertNotMapDoesNotExistCheck",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotNamedPrimitiveUnknownExportCheck",
+              "kind": "function",
+              "name": "assertNotNamedPrimitiveUnknownExportCheck",
+              "path": "test/type-tests.ts#assertNotNamedPrimitiveUnknownExportCheck",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotNumberDoesNotExistCheck",
+              "kind": "function",
+              "name": "assertNotNumberDoesNotExistCheck",
+              "path": "test/type-tests.ts#assertNotNumberDoesNotExistCheck",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotObjectDoesNotExistCheck",
+              "kind": "function",
+              "name": "assertNotObjectDoesNotExistCheck",
+              "path": "test/type-tests.ts#assertNotObjectDoesNotExistCheck",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotPrimitiveUnknownCheck",
+              "kind": "function",
+              "name": "assertNotPrimitiveUnknownCheck",
+              "path": "test/type-tests.ts#assertNotPrimitiveUnknownCheck",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotSetDoesNotExistCheck",
+              "kind": "function",
+              "name": "assertNotSetDoesNotExistCheck",
+              "path": "test/type-tests.ts#assertNotSetDoesNotExistCheck",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotBigintUnknownCheck",
+              "kind": "function",
+              "name": "assertNotBigintUnknownCheck",
+              "path": "test/type-tests.ts#assertNotBigintUnknownCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotBooleanUnknownCheck",
+              "kind": "function",
+              "name": "assertNotBooleanUnknownCheck",
+              "path": "test/type-tests.ts#assertNotBooleanUnknownCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotNamedNullOrUndefinedUnknownExportCheck",
+              "kind": "function",
+              "name": "assertNotNamedNullOrUndefinedUnknownExportCheck",
+              "path": "test/type-tests.ts#assertNotNamedNullOrUndefinedUnknownExportCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotNamedStringExportCheck",
+              "kind": "function",
+              "name": "assertNotNamedStringExportCheck",
+              "path": "test/type-tests.ts#assertNotNamedStringExportCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotNamedStringUnknownExportCheck",
+              "kind": "function",
+              "name": "assertNotNamedStringUnknownExportCheck",
+              "path": "test/type-tests.ts#assertNotNamedStringUnknownExportCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotNamedUndefinedExportCheck",
+              "kind": "function",
+              "name": "assertNotNamedUndefinedExportCheck",
+              "path": "test/type-tests.ts#assertNotNamedUndefinedExportCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotNullOrUndefinedCheck",
+              "kind": "function",
+              "name": "assertNotNullOrUndefinedCheck",
+              "path": "test/type-tests.ts#assertNotNullOrUndefinedCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotNullOrUndefinedUnknownCheck",
+              "kind": "function",
+              "name": "assertNotNullOrUndefinedUnknownCheck",
+              "path": "test/type-tests.ts#assertNotNullOrUndefinedUnknownCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotNullUnknownCheck",
+              "kind": "function",
+              "name": "assertNotNullUnknownCheck",
+              "path": "test/type-tests.ts#assertNotNullUnknownCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotStringCheck",
+              "kind": "function",
+              "name": "assertNotStringCheck",
+              "path": "test/type-tests.ts#assertNotStringCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotStringUnknownCheck",
+              "kind": "function",
+              "name": "assertNotStringUnknownCheck",
+              "path": "test/type-tests.ts#assertNotStringUnknownCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotSymbolUnknownCheck",
+              "kind": "function",
+              "name": "assertNotSymbolUnknownCheck",
+              "path": "test/type-tests.ts#assertNotSymbolUnknownCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotUndefinedCheck",
+              "kind": "function",
+              "name": "assertNotUndefinedCheck",
+              "path": "test/type-tests.ts#assertNotUndefinedCheck",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "test/type-tests.ts#assertNotUndefinedUnknownCheck",
+              "kind": "function",
+              "name": "assertNotUndefinedUnknownCheck",
+              "path": "test/type-tests.ts#assertNotUndefinedUnknownCheck",
+              "size": 4,
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "test/tsconfig.json",
+          "kind": "file",
+          "name": "tsconfig.json",
+          "path": "test/tsconfig.json",
+          "size": 12,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "source",
+      "kind": "folder",
+      "name": "source",
+      "path": "source",
+      "size": 2240,
+      "children": [
+        {
+          "id": "source/index.ts",
+          "kind": "file",
+          "name": "index.ts",
+          "path": "source/index.ts",
+          "size": 2038,
+          "children": [
+            {
+              "id": "source/index.ts#isClass",
+              "kind": "function",
+              "name": "isClass",
+              "path": "source/index.ts#isClass",
+              "size": 1494,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#detect",
+              "kind": "function",
+              "name": "detect",
+              "path": "source/index.ts#detect",
+              "size": 65,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#validatePredicateArray",
+              "kind": "function",
+              "name": "validatePredicateArray",
+              "path": "source/index.ts#validatePredicateArray",
+              "size": 16,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAll:426",
+              "kind": "function",
+              "name": "isAll",
+              "path": "source/index.ts#isAll:426",
+              "size": 15,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAny:452",
+              "kind": "function",
+              "name": "isAny",
+              "path": "source/index.ts#isAny:452",
+              "size": 15,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#getObjectType",
+              "kind": "function",
+              "name": "getObjectType",
+              "path": "source/index.ts#getObjectType",
+              "size": 13,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isArray",
+              "kind": "function",
+              "name": "isArray",
+              "path": "source/index.ts#isArray",
+              "size": 12,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#hasBoxedPrimitiveBrand",
+              "kind": "function",
+              "name": "hasBoxedPrimitiveBrand",
+              "path": "source/index.ts#hasBoxedPrimitiveBrand",
+              "size": 10,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isBoxedPrimitiveObject",
+              "kind": "function",
+              "name": "isBoxedPrimitiveObject",
+              "path": "source/index.ts#isBoxedPrimitiveObject",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#validatePredicate",
+              "kind": "function",
+              "name": "validatePredicate",
+              "path": "source/index.ts#validatePredicate",
+              "size": 5,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isBuffer",
+              "kind": "function",
+              "name": "isBuffer",
+              "path": "source/index.ts#isBuffer",
+              "size": 4,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#hasPromiseApi",
+              "kind": "function",
+              "name": "hasPromiseApi",
+              "path": "source/index.ts#hasPromiseApi",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAbsoluteModule2",
+              "kind": "function",
+              "name": "isAbsoluteModule2",
+              "path": "source/index.ts#isAbsoluteModule2",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isArrayBuffer",
+              "kind": "function",
+              "name": "isArrayBuffer",
+              "path": "source/index.ts#isArrayBuffer",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isArrayLike",
+              "kind": "function",
+              "name": "isArrayLike",
+              "path": "source/index.ts#isArrayLike",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isArrayOf",
+              "kind": "function",
+              "name": "isArrayOf",
+              "path": "source/index.ts#isArrayOf",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAsyncFunction",
+              "kind": "function",
+              "name": "isAsyncFunction",
+              "path": "source/index.ts#isAsyncFunction",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAsyncGenerator",
+              "kind": "function",
+              "name": "isAsyncGenerator",
+              "path": "source/index.ts#isAsyncGenerator",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAsyncGeneratorFunction",
+              "kind": "function",
+              "name": "isAsyncGeneratorFunction",
+              "path": "source/index.ts#isAsyncGeneratorFunction",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAsyncIterable",
+              "kind": "function",
+              "name": "isAsyncIterable",
+              "path": "source/index.ts#isAsyncIterable",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isBigInt64Array",
+              "kind": "function",
+              "name": "isBigInt64Array",
+              "path": "source/index.ts#isBigInt64Array",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isBigUint64Array",
+              "kind": "function",
+              "name": "isBigUint64Array",
+              "path": "source/index.ts#isBigUint64Array",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isBigint",
+              "kind": "function",
+              "name": "isBigint",
+              "path": "source/index.ts#isBigint",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isBlob",
+              "kind": "function",
+              "name": "isBlob",
+              "path": "source/index.ts#isBlob",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isBoolean",
+              "kind": "function",
+              "name": "isBoolean",
+              "path": "source/index.ts#isBoolean",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isBoundFunction",
+              "kind": "function",
+              "name": "isBoundFunction",
+              "path": "source/index.ts#isBoundFunction",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isObjectTypeName",
+              "kind": "function",
+              "name": "isObjectTypeName",
+              "path": "source/index.ts#isObjectTypeName",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isOptional",
+              "kind": "function",
+              "name": "isOptional",
+              "path": "source/index.ts#isOptional",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isPrimitiveTypeName",
+              "kind": "function",
+              "name": "isPrimitiveTypeName",
+              "path": "source/index.ts#isPrimitiveTypeName",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isTypedArrayName",
+              "kind": "function",
+              "name": "isTypedArrayName",
+              "path": "source/index.ts#isTypedArrayName",
+              "size": 3,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAll:417",
+              "kind": "function",
+              "name": "isAll",
+              "path": "source/index.ts#isAll:417",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAll:418",
+              "kind": "function",
+              "name": "isAll",
+              "path": "source/index.ts#isAll:418",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAll:419",
+              "kind": "function",
+              "name": "isAll",
+              "path": "source/index.ts#isAll:419",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAll:420",
+              "kind": "function",
+              "name": "isAll",
+              "path": "source/index.ts#isAll:420",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAll:421",
+              "kind": "function",
+              "name": "isAll",
+              "path": "source/index.ts#isAll:421",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAll:422",
+              "kind": "function",
+              "name": "isAll",
+              "path": "source/index.ts#isAll:422",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAll:423",
+              "kind": "function",
+              "name": "isAll",
+              "path": "source/index.ts#isAll:423",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAll:425",
+              "kind": "function",
+              "name": "isAll",
+              "path": "source/index.ts#isAll:425",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAny:443",
+              "kind": "function",
+              "name": "isAny",
+              "path": "source/index.ts#isAny:443",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAny:444",
+              "kind": "function",
+              "name": "isAny",
+              "path": "source/index.ts#isAny:444",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAny:445",
+              "kind": "function",
+              "name": "isAny",
+              "path": "source/index.ts#isAny:445",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAny:446",
+              "kind": "function",
+              "name": "isAny",
+              "path": "source/index.ts#isAny:446",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAny:447",
+              "kind": "function",
+              "name": "isAny",
+              "path": "source/index.ts#isAny:447",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAny:448",
+              "kind": "function",
+              "name": "isAny",
+              "path": "source/index.ts#isAny:448",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAny:449",
+              "kind": "function",
+              "name": "isAny",
+              "path": "source/index.ts#isAny:449",
+              "size": 1,
+              "children": []
+            },
+            {
+              "id": "source/index.ts#isAny:451",
+              "kind": "function",
+              "name": "isAny",
+              "path": "source/index.ts#isAny:451",
+              "size": 1,
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "source/types.ts",
+          "kind": "file",
+          "name": "types.ts",
+          "path": "source/types.ts",
+          "size": 199,
+          "children": []
+        },
+        {
+          "id": "source/utilities.ts",
+          "kind": "file",
+          "name": "utilities.ts",
+          "path": "source/utilities.ts",
+          "size": 3,
+          "children": [
+            {
+              "id": "source/utilities.ts#keysOf",
+              "kind": "function",
+              "name": "keysOf",
+              "path": "source/utilities.ts#keysOf",
+              "size": 3,
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "readme.md",
+      "kind": "file",
+      "name": "readme.md",
+      "path": "readme.md",
+      "size": 924,
+      "children": []
+    },
+    {
+      "id": "package.json",
+      "kind": "file",
+      "name": "package.json",
+      "path": "package.json",
+      "size": 76,
+      "children": []
+    },
+    {
+      "id": ".github",
+      "kind": "folder",
+      "name": ".github",
+      "path": ".github",
+      "size": 26,
+      "children": [
+        {
+          "id": ".github/workflows",
+          "kind": "folder",
+          "name": "workflows",
+          "path": ".github/workflows",
+          "size": 21,
+          "children": [
+            {
+              "id": ".github/workflows/main.yml",
+              "kind": "file",
+              "name": "main.yml",
+              "path": ".github/workflows/main.yml",
+              "size": 21,
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": ".github/security.md",
+          "kind": "file",
+          "name": "security.md",
+          "path": ".github/security.md",
+          "size": 5,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": ".editorconfig",
+      "kind": "file",
+      "name": ".editorconfig",
+      "path": ".editorconfig",
+      "size": 12,
+      "children": []
+    },
+    {
+      "id": "tsconfig.json",
+      "kind": "file",
+      "name": "tsconfig.json",
+      "path": "tsconfig.json",
+      "size": 12,
+      "children": []
+    },
+    {
+      "id": "AGENTS.md",
+      "kind": "file",
+      "name": "AGENTS.md",
+      "path": "AGENTS.md",
+      "size": 9,
+      "children": []
+    },
+    {
+      "id": "license",
+      "kind": "file",
+      "name": "license",
+      "path": "license",
+      "size": 9,
+      "children": []
+    },
+    {
+      "id": ".gitignore",
+      "kind": "file",
+      "name": ".gitignore",
+      "path": ".gitignore",
+      "size": 4,
+      "children": []
+    },
+    {
+      "id": ".gitattributes",
+      "kind": "file",
+      "name": ".gitattributes",
+      "path": ".gitattributes",
+      "size": 1,
+      "children": []
+    },
+    {
+      "id": ".npmrc",
+      "kind": "file",
+      "name": ".npmrc",
+      "path": ".npmrc",
+      "size": 1,
+      "children": []
+    },
+    {
+      "id": "CLAUDE.md",
+      "kind": "file",
+      "name": "CLAUDE.md",
+      "path": "CLAUDE.md",
+      "size": 1,
+      "children": []
+    }
+  ]
+}

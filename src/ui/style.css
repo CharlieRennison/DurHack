@@ -18,3 +18,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b2a4a; fon
   background: rgba(10, 20, 35, 0.8); border-radius: 6px; font-size: 13px; line-height: 1.5;
 }
 #inspect .dim { opacity: 0.6; }
+#reef-btn {
+  position: absolute; top: 12px; right: 12px; padding: 6px 12px; pointer-events: auto;
+  background: #f0628f; color: #fff; border: none; border-radius: 6px; font: 600 13px system-ui, sans-serif; cursor: pointer;
+}
+#reef-btn:hover { background: #e24a7c; }

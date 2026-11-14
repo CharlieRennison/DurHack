@@ -49,3 +49,23 @@ export function renderInspect(el: HTMLElement, tile: Tile | null, node: RepoNode
     line('Size', String(node.size));
   }
 }
+
+/** Time left until the next local midnight, as HH:MM:SS. Exported for testing. */
+export function untilMidnight(now: Date): string {
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0);
+  const total = Math.max(0, Math.round((midnight.getTime() - now.getTime()) / 1000));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+}
+
+/** Live "pizza at midnight" countdown, updated every second. */
+export function startPizzaCountdown(el: HTMLElement): void {
+  const tick = () => {
+    const now = new Date();
+    // The first 10 minutes after midnight: pizza is here.
+    el.textContent = now.getHours() === 0 && now.getMinutes() < 10 ? '🍕 Pizza time!' : `🍕 Pizza in ${untilMidnight(now)}`;
+  };
+  tick();
+  window.setInterval(tick, 1000);
+}

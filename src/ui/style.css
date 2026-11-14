@@ -2,8 +2,14 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b2a4a; fon
 #canvas-host { position: fixed; inset: 0; }
 #canvas-host canvas { display: block; cursor: grab; }
 #overlay { position: fixed; inset: 0; pointer-events: none; color: #fff; }
+#topbar { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; align-items: stretch; }
+#repo-select {
+  pointer-events: auto; background: rgba(10, 20, 35, 0.8); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px; padding: 6px 8px; font: 600 14px system-ui, sans-serif; cursor: pointer;
+}
+#repo-select option { background: #0b2a4a; color: #fff; }
 #breadcrumb {
-  position: absolute; top: 12px; left: 12px; padding: 6px 10px;
+  padding: 6px 10px;
   background: rgba(10, 20, 35, 0.8); border-radius: 6px; pointer-events: auto;
   font-size: 14px;
 }
@@ -18,8 +24,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b2a4a; fon
   background: rgba(10, 20, 35, 0.8); border-radius: 6px; font-size: 13px; line-height: 1.5;
 }
 #inspect .dim { opacity: 0.6; }
-#reef-btn {
-  position: absolute; top: 12px; right: 12px; padding: 6px 12px; pointer-events: auto;
-  background: #f0628f; color: #fff; border: none; border-radius: 6px; font: 600 13px system-ui, sans-serif; cursor: pointer;
+#pizza {
+  position: absolute; bottom: 12px; right: 12px; padding: 8px 14px;
+  background: rgba(10, 20, 35, 0.8); border-radius: 6px; font: 600 15px system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
-#reef-btn:hover { background: #e24a7c; }

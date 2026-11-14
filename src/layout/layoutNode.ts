@@ -1,6 +1,7 @@
 import { createNoise2D } from 'simplex-noise';
 import { inBounds, neighbors } from '../grid';
-import { GRID_SIZE, MAX_ISLAND_DEPTH, type Grid, type RepoNode, type Tile } from '../types';
+import { GRID_SIZE, MAX_ISLAND_DEPTH, type Grid, type RepoNode, type Tile, type TileType } from '../types';
+import { effectiveChildren, folderHeight, isVillage } from './children';
 import { hashString, mulberry32 } from './rng';
 
 const MAX_CHILDREN = 100;
@@ -9,15 +10,24 @@ const LAND_FRACTION = 0.5;
 const SUB_LAND_FRACTION = 0.22;
 /** Open-water cells kept between different islands. */
 const ISLAND_GAP = 4;
+/** Houses in a village sit close together. */
+const VILLAGE_GAP = 1;
 
 /**
  * Lay out one node's direct children as islands in an ocean. Deterministic per node.path.
  * `allowed` (optional, grid[y][x]) restricts land to those cells; used to keep a node's
  * sub-islands inside the footprint of its own island on the parent grid.
  */
-export function layoutNode(node: RepoNode, depth: number, allowed?: boolean[][]): Grid {
-  // Children nested deeper than MAX_ISLAND_DEPTH become coral reefs instead of islands (no coast ring).
-  const landType = depth + 1 > MAX_ISLAND_DEPTH ? 'coral' : 'island';
+export function layoutNode(node: RepoNode, _depth: number, allowed?: boolean[][]): Grid {
+  // What each child looks like depends on its sub-folder depth ("height"), not on how far it is from the root:
+  //   files / functions  -> house
+  //   folder with only files (a village island full of houses) or 1..MAX_ISLAND_DEPTH-1 levels below -> island
+  //   folder with MAX_ISLAND_DEPTH or more levels below -> coral (plain light water; it IS the border, no sand)
+  const tileTypeFor = (child: RepoNode): TileType => {
+    if (child.kind !== 'folder') return 'house';
+    return folderHeight(child) >= MAX_ISLAND_DEPTH ? 'coral' : 'island';
+  };
+  const gap = isVillage(node) ? VILLAGE_GAP : ISLAND_GAP;
   const rand = mulberry32(hashString(node.path));
   const noise = createNoise2D(rand);
 
@@ -26,12 +36,13 @@ export function layoutNode(node: RepoNode, depth: number, allowed?: boolean[][])
   );
 
   // Biggest child nearest the centre; the rest on a jittered ring.
-  const sorted = [...node.children]
+  const sorted = [...effectiveChildren(node)]
     .sort((a, b) => b.size - a.size || a.id.localeCompare(b.id))
     .slice(0, MAX_CHILDREN);
   if (sorted.length === 0) return grid;
 
-  const weights = sorted.map((c) => Math.sqrt(Math.max(c.size, 1)));
+  // Island size follows how many islands/houses must fit inside it, not file size.
+  const weights = sorted.map((c) => 2 + effectiveChildren(c).length);
   const totalW = weights.reduce((a, b) => a + b, 0);
   const ok = (x: number, y: number) => !allowed || allowed[y][x];
   const okCells: [number, number][] = [];
@@ -46,14 +57,14 @@ export function layoutNode(node: RepoNode, depth: number, allowed?: boolean[][])
   if (allowed) {
     seeds = maskedSeeds(sorted.length, okCells, rand);
   } else {
-    const placed = packSeeds(sorted.length, weights.map((w) => (w / totalW) * landBudget), centre, rand);
+    const placed = packSeeds(sorted.length, weights.map((w) => (w / totalW) * landBudget), centre, rand, gap);
     seeds = placed.seeds;
     budgetScale = placed.scale;
   }
 
   const claim = (x: number, y: number, i: number) => {
     owner[y][x] = i;
-    grid[y][x] = { type: landType, variant: landType === 'coral' ? coralVariant(x, y) : 0, height: 1, nodeId: sorted[i].id };
+    grid[y][x] = { type: tileTypeFor(sorted[i]), variant: 0, height: 1, nodeId: sorted[i].id };
   };
   // Claim every seed up front so a growing island can never swallow another's seed.
   seeds.forEach(([x, y], i) => {
@@ -88,7 +99,7 @@ export function layoutNode(node: RepoNode, depth: number, allowed?: boolean[][])
       }
       const [fx, fy] = st.frontier[best];
       const free = neighbors(fx, fy).filter(
-        ([nx, ny]) => owner[ny][nx] === -1 && ok(nx, ny) && !tooCloseToOther(owner, nx, ny, i),
+        ([nx, ny]) => owner[ny][nx] === -1 && ok(nx, ny) && !tooCloseToOther(owner, nx, ny, i, gap),
       );
       if (free.length === 0) {
         st.frontier.splice(best, 1);
@@ -140,6 +151,7 @@ function packSeeds(
   budgets: number[],
   centre: number,
   rand: () => number,
+  gap: number,
 ): { seeds: [number, number][]; scale: number } {
   const tries = n <= 12 ? 3000 : 500;
   // Fixed candidate points so a smaller scale re-uses the same sequence (deterministic).
@@ -162,7 +174,7 @@ function packSeeds(
         const y = lo + v * (hi - lo);
         let clear = true;
         for (let j = 0; j < seeds.length && clear; j++) {
-          if (Math.hypot(x - seeds[j][0], y - seeds[j][1]) < radius[i] + radius[j] + ISLAND_GAP + 1) clear = false;
+          if (Math.hypot(x - seeds[j][0], y - seeds[j][1]) < radius[i] + radius[j] + gap + 1) clear = false;
         }
         if (!clear) continue;
         const d = Math.hypot(x - centre, y - centre);
@@ -217,16 +229,10 @@ function maskedSeeds(n: number, cells: [number, number][], rand: () => number): 
   return seeds;
 }
 
-/** Coral look per tile: 0 = bare reef floor, 1-5 = coral forms. Pure hash, so no PRNG state is consumed. */
-export function coralVariant(x: number, y: number): number {
-  const h = (Math.imul(x + 1, 374761393) ^ Math.imul(y + 1, 668265263)) >>> 0;
-  return (h >>> 8) % 6;
-}
-
 /** True if another island owns land within ISLAND_GAP cells of (x,y); keeps open water between islands. */
-function tooCloseToOther(owner: number[][], x: number, y: number, me: number): boolean {
-  for (let dy = -ISLAND_GAP; dy <= ISLAND_GAP; dy++) {
-    for (let dx = -ISLAND_GAP; dx <= ISLAND_GAP; dx++) {
+function tooCloseToOther(owner: number[][], x: number, y: number, me: number, gap: number): boolean {
+  for (let dy = -gap; dy <= gap; dy++) {
+    for (let dx = -gap; dx <= gap; dx++) {
       if (!inBounds(x + dx, y + dy)) continue;
       const o = owner[y + dy][x + dx];
       if (o !== -1 && o !== me) return true;

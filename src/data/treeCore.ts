@@ -2,7 +2,7 @@
  * Browser-safe tree builder shared by the Node CLI (buildTree.ts) and the live GitHub loader (live.ts).
  * Pure: no fs, no network, no randomness. The same entries always give the same RepoNode tree.
  *
- * Mapping (see HANDOFF.md): root = folder id "root" path ""; directory = folder (id = path);
+ * Mapping: root = folder id "root" path ""; directory = folder (id = path);
  * file = file (id = path); function = function (id = "<file>#<name>").
  * Children sorted by size desc then name asc.
  */

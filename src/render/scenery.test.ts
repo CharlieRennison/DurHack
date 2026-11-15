@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_SHARE, MIN_SPACING, MIN_TREES, placeScenery, treeTarget, type Placement } from './scenery';
+import { FILL_GAP, MAX_SHARE, MIN_SPACING, MIN_TREES, placeScenery, treeTarget, type Placement } from './scenery';
 
 /** A w x h block of eligible cells. */
 const block = (w: number, h: number) => Array.from({ length: w * h }, (_, k) => ({ i: 3 + (k % w), j: 3 + Math.floor(k / w) }));
@@ -50,5 +50,33 @@ describe('placeScenery', () => {
     const kinds = new Set(placeScenery(block(30, 30), 'big').map((p) => p.kind));
     expect(kinds.has('conifer') || kinds.has('leafy')).toBe(true);
     expect(kinds.size).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('populating the empty space', () => {
+  it('leaves no clearing wider than FILL_GAP (unless the cap on trees is reached)', () => {
+    for (const [w, h] of [[14, 14], [24, 24], [30, 12]] as const) {
+      for (const seed of ['a', 'b', 'c', 'd', 'e']) {
+        const cells = block(w, h);
+        const ps = placeScenery(cells, seed);
+        const t = trees(ps);
+        if (t.length >= Math.floor(w * h * MAX_SHARE)) continue;
+        for (const c of cells) {
+          const d = Math.min(...t.map((p) => Math.hypot(p.i + 0.5 + p.dx - (c.i + 0.5), p.j + 0.5 + p.dy - (c.j + 0.5))));
+          expect(d, `${w}x${h} ${seed}`).toBeLessThanOrEqual(FILL_GAP + 1e-9);
+        }
+      }
+    }
+  });
+  it('keeps the spacing and the cap while filling', () => {
+    const cells = block(24, 24);
+    const t = trees(placeScenery(cells, 'full'));
+    expect(t.length).toBeLessThanOrEqual(Math.floor(cells.length * MAX_SHARE));
+    for (let a = 0; a < t.length; a++) {
+      for (let b = a + 1; b < t.length; b++) {
+        const d = Math.hypot(t[a].i + t[a].dx - (t[b].i + t[b].dx), t[a].j + t[a].dy - (t[b].j + t[b].dy));
+        expect(d).toBeGreaterThanOrEqual(MIN_SPACING - 1e-9);
+      }
+    }
   });
 });

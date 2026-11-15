@@ -100,7 +100,7 @@ function raw(template: TemplateName, n: number, rnd: () => number): Raw {
           ...ring(a, 0.32, rnd() * 6, 0.2, rnd).map(([x, y]) => [x - 0.5, y] as P),
           ...ring(n - a, 0.32, rnd() * 6, 0.2, rnd).map(([x, y]) => [x + 0.5, y] as P),
         ],
-        plazas: [{ at: [-0.5, 0], r: 1.5, fire: true }, { at: [0.5, 0], r: 1.5, fire: true }],
+        plazas: [{ at: [-0.5, 0], r: 1.5, fire: true }, { at: [0.5, 0], r: 1.5, fire: false }], // one campfire per village
         paths: [[[-0.5, 0], [0.5, 0]]],
       };
     }
@@ -108,7 +108,7 @@ function raw(template: TemplateName, n: number, rnd: () => number): Raw {
       const inner = Math.min(n, Math.max(6, Math.round(n * 0.4)));
       return {
         houses: [...ring(inner, 0.5, rnd() * 6, 0.1, rnd), ...ring(n - inner, 0.85, rnd() * 6, 0.1, rnd)],
-        plazas: [{ at: [-0.1, 0], r: 2.4, fire: true }, { at: [0.12, 0.05], r: 2.4, fire: n > 18 }],
+        plazas: [{ at: [-0.1, 0], r: 2.4, fire: true }, { at: [0.12, 0.05], r: 2.4, fire: false }], // one campfire per village
         paths: [[[0, 0], [1.05, 0.4]], [[0, 0], [-1.05, -0.4]]],
       };
     }
@@ -138,12 +138,15 @@ function line(a: P, b: P): P[] {
     out.push([x0, y0]);
     if (x0 === x1 && y0 === y1) break;
     const e2 = 2 * err;
+    let stepX = false;
     if (e2 > -dy) {
       err -= dy;
       x0 += sx;
+      stepX = true;
     }
     if (e2 < dx) {
       err += dx;
+      if (stepX) out.push([x0, y0]); // a diagonal step gets a corner cell, so lines are 4-connected
       y0 += sy;
     }
   }
@@ -249,5 +252,109 @@ export function planVillage(n: number, region: boolean[][], seed: string): Villa
   }
   // Most central first: the biggest file gets the heart of the village.
   houses.sort((p, q) => Math.hypot(p[0] - cx, p[1] - cy) - Math.hypot(q[0] - cx, q[1] - cy));
+
+  // Connect every house to the network: from the middle outwards, each house gets the shortest path (4-connected,
+  // over free cells) to the nearest thing already connected, which is a plaza, a path or an earlier house. The
+  // result is one connected web of paths linking all the houses.
+  const seedKeys = new Set(houses.map((q) => key(q[0], q[1])));
+  const connected = new Set<number>(); // plaza, path and connected-house cells
+  const dirs: P[] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  // The template's own plazas and paths may have been cut into pieces by the islet's shape: join the pieces first.
+  const pieces: number[][] = [];
+  {
+    const left = new Set(reserved);
+    while (left.size) {
+      const first = left.values().next().value as number;
+      left.delete(first);
+      const comp = [first];
+      for (let qi = 0; qi < comp.length; qi++) {
+        const x = comp[qi] % GRID_SIZE;
+        const y = (comp[qi] / GRID_SIZE) | 0;
+        for (const [dx, dy] of dirs) {
+          const nk = key(x + dx, y + dy);
+          if (left.delete(nk)) comp.push(nk);
+        }
+      }
+      pieces.push(comp);
+    }
+    pieces.sort((u, v) => v.length - u.length);
+  }
+  if (pieces.length > 0) for (const k of pieces[0]) connected.add(k);
+  for (const comp of pieces.slice(1)) {
+    // BFS from the whole piece to the connected web over free cells, then add the bridge and the piece
+    const prev = new Map<number, number>(comp.map((k) => [k, -1]));
+    const queue = [...comp];
+    let goal = -1;
+    for (let qi = 0; qi < queue.length && goal < 0; qi++) {
+      const x = queue[qi] % GRID_SIZE;
+      const y = (queue[qi] / GRID_SIZE) | 0;
+      for (const [dx, dy] of dirs) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!inRegion(nx, ny)) continue;
+        const nk = key(nx, ny);
+        if (prev.has(nk)) continue;
+        if (connected.has(nk)) {
+          prev.set(nk, queue[qi]);
+          goal = nk;
+          break;
+        }
+        if (seedKeys.has(nk) || reserved.has(nk)) continue;
+        prev.set(nk, queue[qi]);
+        queue.push(nk);
+      }
+    }
+    if (goal >= 0) {
+      for (let c = prev.get(goal)!; c !== -1 && !comp.includes(c); c = prev.get(c)!) {
+        reserved.add(c);
+        connected.add(c);
+        paths.push([c % GRID_SIZE, (c / GRID_SIZE) | 0]);
+      }
+    }
+    for (const k of comp) connected.add(k);
+  }
+  houses.forEach((hs, idx) => {
+    const start = key(hs[0], hs[1]);
+    if (connected.size === 0) {
+      connected.add(start); // the first house anchors a village with no plaza
+      return;
+    }
+    // BFS over free cells (not other houses, not already path) until a connected cell is touched
+    const prev = new Map<number, number>([[start, -1]]);
+    const queue: number[] = [start];
+    let goal = -1;
+    for (let qi = 0; qi < queue.length && goal < 0; qi++) {
+      const cur = queue[qi];
+      const x = cur % GRID_SIZE;
+      const y = (cur / GRID_SIZE) | 0;
+      for (const [dx, dy] of dirs) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!inRegion(nx, ny)) continue;
+        const nk = key(nx, ny);
+        if (prev.has(nk)) continue;
+        if (connected.has(nk)) {
+          prev.set(nk, cur);
+          goal = nk;
+          break;
+        }
+        if (seedKeys.has(nk) || reserved.has(nk)) continue; // other houses and already-used cells block the way
+        prev.set(nk, cur);
+        queue.push(nk);
+      }
+    }
+    if (goal >= 0) {
+      // walk back from the goal; the cells strictly between the goal and this house become path
+      for (let c = prev.get(goal)!; c !== start && c !== -1; c = prev.get(c)!) {
+        const px = c % GRID_SIZE;
+        const py = (c / GRID_SIZE) | 0;
+        reserved.add(c);
+        connected.add(c);
+        paths.push([px, py]);
+      }
+    }
+    connected.add(start);
+    void idx;
+  });
   return { template, houses, plazas, fires, paths };
 }

@@ -28,6 +28,10 @@ DEEP = (24, 167, 180, 255)
 SHALLOW = (74, 208, 221, 255)
 WET = (182, 159, 66, 255)
 SAND = (255, 217, 3, 255)
+# Grain for the dry sand: a few tones close to SAND so it reads as sandy, not as flat yellow
+SAND_DARK = (247, 209, 3, 255)    # damp patches and grains
+SAND_DEEP = (238, 197, 4, 255)    # the odd pebble or shadow in a ripple
+SAND_LIGHT = (255, 224, 40, 255)  # sun-bleached grains
 FOAM = (255, 255, 255, 255)
 
 # Band depths measured from the original (mean first row of each band), and how much they wobble
@@ -93,7 +97,27 @@ def wobble(field, x, y):
     return top + (bot - top) * fv
 
 
-def paint(depth):
+def hash2(x, y, seed):
+    """Deterministic hash of a pixel position in [0, 1). Positions wrap every 32 px, so the grain tiles seamlessly."""
+    v = ((x % N) * 374761393 + (y % N) * 668265263 + seed * 982451653) & 0xFFFFFFFF
+    v = ((v ^ (v >> 13)) * 1274126177) & 0xFFFFFFFF
+    return ((v ^ (v >> 16)) & 0xFFFFFFFF) / 4294967296
+
+
+def sand_pixel(x, y, seed=0):
+    """Sand with light texture: a few soft blotches of lighter and darker sand and some scattered grains.
+    `seed` makes a different pattern (the plain sand tile is exported in several so the grain does not repeat)."""
+    blotch = wobble(FIELDS[2], x + 7 + seed * 11, y + 3 + seed * 5)  # smooth, wraps every 32 px
+    base = SAND_DARK if blotch > 0.68 else SAND_LIGHT if blotch < -0.72 else SAND
+    r = hash2(x, y, 3 + seed * 17)
+    if r < 0.007:
+        return SAND_DEEP if base == SAND_DARK else SAND_DARK
+    if r > 0.995:
+        return SAND_LIGHT
+    return base
+
+
+def paint(depth, sand_seed=0):
     """depth(px, py) -> shore depth s at a pixel centre; returns the 32x32 tile."""
     img = Image.new('RGBA', (N, N))
     out = img.load()
@@ -105,8 +129,9 @@ def paint(depth):
             elif s < t[1]: col = SHALLOW
             elif s < t[2]: col = WET
             else: col = SAND
+            sand_here = col == SAND
             # Foam only hugs the shore: open water is plain, so it cannot clash with water drawn at another zoom level.
-            out[x, y] = FOAM if col != SAND and NET[y][x] and s > T_SHALLOW - FOAM_REACH else col
+            out[x, y] = sand_pixel(x, y, sand_seed) if sand_here else (FOAM if NET[y][x] and s > T_SHALLOW - FOAM_REACH else col)
     return img
 
 
@@ -248,8 +273,11 @@ if TILESET:
     save('water.deep', 'water/deep.png', water, cells=1)  # light blue everywhere: the deep sea matches the shallows
     save('water.reef', 'water/reef.png', recolour(water, {DEEP: (98, 214, 200, 255)}), cells=1)
     save('shore.water', 'shore/water.png', water)
-    save('shore.sand', 'shore/sand.png', frames[idx['sand']])
-    save('ground.sand', 'shore/sand.png', frames[idx['sand']])
+    # the plain sand tile comes in four grain patterns (the first is the one in the .piskel), so it does not repeat
+    sand_tiles = [frames[idx['sand']]] + [paint(TILES[idx['sand']][1], sd) for sd in (1, 2, 3)]
+    for k, tile in enumerate(sand_tiles):
+        save('shore.sand', f'shore/sand_{k}.png', tile)
+        save('ground.sand', f'shore/sand_{k}.png', tile)
     for side in 'NESW':
         for k, (name, _) in enumerate(VARIANTS):
             save(f'shore.edge.{side.lower()}', f'shore/edge_{side.lower()}_{k}.png', frames[idx[f'water {SIDE_NAME[side]}, {name}']], weight=3 if k == 0 else 1)

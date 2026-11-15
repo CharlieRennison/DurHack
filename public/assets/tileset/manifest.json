@@ -24,12 +24,30 @@
   ],
   "shore.sand": [
     {
-      "file": "shore/sand.png"
+      "file": "shore/sand_0.png"
+    },
+    {
+      "file": "shore/sand_1.png"
+    },
+    {
+      "file": "shore/sand_2.png"
+    },
+    {
+      "file": "shore/sand_3.png"
     }
   ],
   "ground.sand": [
     {
-      "file": "shore/sand.png"
+      "file": "shore/sand_0.png"
+    },
+    {
+      "file": "shore/sand_1.png"
+    },
+    {
+      "file": "shore/sand_2.png"
+    },
+    {
+      "file": "shore/sand_3.png"
     }
   ],
   "shore.edge.n": [
@@ -367,6 +385,401 @@
       ],
       "widthInTiles": 2.2,
       "shadowInTiles": 1.6
+    }
+  ],
+  "objects.house.1": [
+    {
+      "file": "objects/house_f1_0.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 24,
+      "weight": 1
+    },
+    {
+      "file": "objects/house_f1_1.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 24,
+      "weight": 1
+    },
+    {
+      "file": "objects/house_f1_2.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 24,
+      "weight": 1
+    },
+    {
+      "file": "objects/house_f1_hut.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 17,
+      "topPx": 6,
+      "weight": 2
+    }
+  ],
+  "objects.house.2": [
+    {
+      "file": "objects/house_f2_0.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 17,
+      "weight": 1
+    },
+    {
+      "file": "objects/house_f2_1.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 17,
+      "weight": 1
+    },
+    {
+      "file": "objects/house_f2_2.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 17,
+      "weight": 1
+    }
+  ],
+  "objects.house.3": [
+    {
+      "file": "objects/house_f3_0.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 10,
+      "weight": 1
+    },
+    {
+      "file": "objects/house_f3_1.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 10,
+      "weight": 1
+    },
+    {
+      "file": "objects/house_f3_2.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 10,
+      "weight": 1
+    }
+  ],
+  "objects.house.4": [
+    {
+      "file": "objects/house_f4_0.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 3,
+      "weight": 1
+    },
+    {
+      "file": "objects/house_f4_1.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 3,
+      "weight": 1
+    },
+    {
+      "file": "objects/house_f4_2.png",
+      "anchor": [
+        0.5,
+        0.9375
+      ],
+      "widthInTiles": 1.0,
+      "buildingPx": 16,
+      "topPx": 3,
+      "weight": 1
+    }
+  ],
+  "objects.seagull": [
+    {
+      "file": "objects/seagull_0.png",
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/seagull_1.png",
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.person.0": [
+    {
+      "file": "objects/person_0_0.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_0_1.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_0_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.person.1": [
+    {
+      "file": "objects/person_1_0.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_1_1.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_1_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.person.2": [
+    {
+      "file": "objects/person_2_0.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_2_1.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_2_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.person.3": [
+    {
+      "file": "objects/person_3_0.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_3_1.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_3_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.person.4": [
+    {
+      "file": "objects/person_4_0.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_4_1.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_4_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.person.5": [
+    {
+      "file": "objects/person_5_0.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_5_1.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_5_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.person.6": [
+    {
+      "file": "objects/person_6_0.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_6_1.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_6_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.person.7": [
+    {
+      "file": "objects/person_7_0.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_7_1.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/person_7_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.boat": [
+    {
+      "file": "objects/boat_0.png",
+      "anchor": [
+        0.5,
+        0.8571428571428571
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/boat_1.png",
+      "anchor": [
+        0.5,
+        0.8571428571428571
+      ],
+      "widthInTiles": 1.0
     }
   ]
 }

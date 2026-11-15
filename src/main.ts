@@ -1,5 +1,7 @@
 import { indexNodes, loadDefaultRoot, loadFunctions, loadManifest, loadRepo, loadRepoLive, type LiveMeta } from './data';
 import { layoutNode } from './layout/layoutNode';
+import { loadCollaborators, type RepoRef } from './render/collaborators';
+import { loadImports } from './render/importsData';
 import { Renderer } from './render/Renderer';
 import { renderBreadcrumb, renderInspect, renderLiveStatus, startBreakfastCountdown } from './ui/panels';
 import type { RepoNode } from './types';
@@ -89,10 +91,27 @@ async function main(): Promise<void> {
     return true;
   };
 
-  const show = (next: RepoNode, meta: LiveMeta | null = null) => {
+  // The repository's collaborators walk its root island (their names come from GitHub's contributors list).
+  let peopleToken = 0;
+  const showPeople = (ref: RepoRef | null) => {
+    const mine = ++peopleToken;
+    renderer.setCollaborators([]);
+    renderer.setImports([]);
+    if (!ref) return;
+    void loadCollaborators(ref, readToken() || undefined).then((names) => {
+      if (mine === peopleToken) renderer.setCollaborators(names);
+    });
+    // which modules import which: boats sail between them
+    void loadImports(ref).then((edges) => {
+      if (mine === peopleToken) renderer.setImports(edges);
+    });
+  };
+
+  const show = (next: RepoNode, meta: LiveMeta | null = null, ref: RepoRef | null = meta ? { owner: meta.owner, repo: meta.repo } : null) => {
     currentMeta = meta;
     byId = indexNodes(next);
     renderer.setRoot(next, layoutNode);
+    showPeople(ref);
   };
 
   const describe = (meta: LiveMeta): void => {
@@ -202,7 +221,7 @@ async function main(): Promise<void> {
     if (!next) return;
     select.disabled = true;
     try {
-      show(await loadRepo(next));
+      show(await loadRepo(next), null, { owner: next.owner, repo: next.repo, id: next.id });
       renderLiveStatus(liveStatus, '');
       history.replaceState(null, '', `?repo=${next.id}`);
     } finally {
@@ -220,6 +239,7 @@ async function main(): Promise<void> {
 
   // Semantic zoom: scroll to zoom into islands; scroll out to return to the parent.
   renderer.setRoot(root, layoutNode);
+  showPeople(initialLive ? { owner: initialLive.meta.owner, repo: initialLive.meta.repo } : entry ? { owner: entry.owner, repo: entry.repo, id: entry.id } : null);
 }
 
 main();

@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_HOUSES, placeHouses, type HouseInput } from './village';
+import { floorsFor, HOUSE_WIDTH, MAX_FLOORS, MAX_HOUSES, placeHouses, type HouseInput } from './village';
 
 const village = (n: number, patch = 9): HouseInput[] =>
   Array.from({ length: n }, (_, k) => ({ id: 'f' + k, x: 3 + k * 2, y: 4, n: patch, size: (k + 1) * 10 }));
-const counts = (ps: { size: string }[]) => ({
-  small: ps.filter((p) => p.size === 'small').length,
-  medium: ps.filter((p) => p.size === 'medium').length,
-  large: ps.filter((p) => p.size === 'large').length,
-});
 
 describe('placeHouses', () => {
   it('is deterministic', () => {
@@ -22,36 +17,50 @@ describe('placeHouses', () => {
       expect([p.x, p.y]).toEqual([src.x, src.y]);
     }
   });
-  it('splits sizes by rank: about 15% large, 35% medium, the rest small', () => {
-    const c = counts(placeHouses(village(20)));
-    expect(c).toEqual({ large: 3, medium: 7, small: 10 });
+  it('draws every house the same width, whatever its code size or patch', () => {
+    const mixed: HouseInput[] = [
+      { id: 'tiny', x: 1, y: 1, n: 1, size: 1 },
+      { id: 'mid', x: 5, y: 5, n: 9, size: 50 },
+      { id: 'huge', x: 9, y: 9, n: 80, size: 9000 },
+    ];
+    const out = placeHouses(mixed);
+    expect(new Set(out.map((p) => p.width))).toEqual(new Set([HOUSE_WIDTH]));
+    expect(new Set(out.map((p) => p.shadowInTiles)).size).toBe(1);
   });
-  it('puts the biggest code in the biggest buildings', () => {
-    const out = placeHouses(village(20));
-    const biggest = out.find((p) => p.id === 'f19')!;
-    const smallest = out.find((p) => p.id === 'f0')!;
-    expect(biggest.size).toBe('large');
-    expect(smallest.size).toBe('small');
+  it('makes bigger files taller: floors never decrease with code size, and stay within 1..MAX_FLOORS', () => {
+    const ins: HouseInput[] = [1, 5, 20, 60, 200, 1000, 20000].map((size, k) => ({ id: 's' + k, x: k * 3, y: 2, n: 9, size }));
+    const out = placeHouses(ins);
+    const floors = ins.map((i) => out.find((p) => p.id === i.id)!.floors);
+    for (let k = 1; k < floors.length; k++) expect(floors[k]).toBeGreaterThanOrEqual(floors[k - 1]);
+    expect(floors[0]).toBe(1);
+    expect(floors[floors.length - 1]).toBe(MAX_FLOORS);
+    expect(Math.max(...floors)).toBeLessThanOrEqual(MAX_FLOORS);
   });
-  it('never makes a large building in a tiny village', () => {
-    expect(counts(placeHouses(village(3))).large).toBe(0);
+  it('gives a median-sized file one floor, and about one more per doubling', () => {
+    expect(floorsFor(100, 100)).toBe(1);
+    expect(floorsFor(50, 100)).toBe(1);
+    expect(floorsFor(200, 100)).toBe(2);
+    expect(floorsFor(400, 100)).toBe(3);
+    expect(floorsFor(100000, 100)).toBe(MAX_FLOORS);
   });
-  it('keeps tiny patches small and cannot give a big building to a small patch', () => {
-    const out = placeHouses(village(10, 2));
-    expect(out.every((p) => p.size === 'small')).toBe(true);
-    expect(placeHouses(village(10, 5)).some((p) => p.size === 'large')).toBe(false);
+  it('makes equal files equal houses, and a village of unknown sizes all one floor', () => {
+    const out = placeHouses([{ id: 'a', x: 0, y: 0, n: 9, size: 100 }, { id: 'b', x: 4, y: 0, n: 9, size: 100 }]);
+    expect(out[0].floors).toBe(out[1].floors);
+    expect(placeHouses(village(5).map((h) => ({ ...h, size: 0 }))).every((p) => p.floors === 1)).toBe(true);
+  });
+  it('mixes heights in an ordinary village (some tall, most short)', () => {
+    const sizes = [3, 5, 8, 12, 15, 20, 30, 45, 90, 200, 600, 2500];
+    const out = placeHouses(sizes.map((size, k) => ({ id: 'x' + k, x: k, y: 0, n: 9, size })));
+    const counts = [1, 2, 3, 4].map((f) => out.filter((p) => p.floors === f).length);
+    expect(counts[0]).toBeGreaterThan(0);
+    expect(counts[2] + counts[3]).toBeGreaterThan(0);
+    expect(counts[0]).toBeGreaterThanOrEqual(counts[3]);
   });
   it('draws buildings only for the biggest houses of a huge village', () => {
     const out = placeHouses(village(100));
     expect(out.length).toBe(MAX_HOUSES);
     expect(out.some((p) => p.id === 'f99')).toBe(true);
     expect(out.some((p) => p.id === 'f0')).toBe(false);
-  });
-  it('sizes a building to its patch, within limits', () => {
-    const small = placeHouses([{ id: 'a', x: 0, y: 0, n: 1, size: 5 }])[0];
-    const big = placeHouses([{ id: 'b', x: 0, y: 0, n: 100, size: 5 }])[0];
-    expect(big.shadowInTiles).toBeGreaterThan(small.shadowInTiles);
-    expect(big.shadowInTiles).toBeLessThanOrEqual(2.6 * 1.1 + 1e-9);
   });
   it('gives nothing for an empty village', () => {
     expect(placeHouses([])).toEqual([]);

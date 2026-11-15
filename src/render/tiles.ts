@@ -45,6 +45,10 @@ export interface Sprite3D {
   widthInTiles: number;
   /** Width of the soft shadow under it, in tiles (the image is usually wider than the object that casts it). */
   shadowInTiles: number;
+  /** Pixels of the image's width the building itself covers (so every building can be drawn at one exact width). */
+  buildingPx: number;
+  /** Row (from the image's top) of the object's highest pixel: where a label floating above it should sit. */
+  topPx: number;
 }
 
 interface ManifestEntry {
@@ -53,6 +57,10 @@ interface ManifestEntry {
   widthInTiles?: number;
   /** Width of the shadow under the object, in tiles (default 0.9 x widthInTiles). */
   shadowInTiles?: number;
+  /** Houses: pixels of the image's width the building covers (default: all of it). */
+  buildingPx?: number;
+  /** Houses: row of the highest pixel, counted from the image's top (default 0). */
+  topPx?: number;
   weight?: number;
   /** Water only: how many grid cells one copy of the image covers (default 1). */
   cells?: number;
@@ -264,6 +272,8 @@ export class TileKit {
             anchor: entry.anchor ?? [0.5, 0.94],
             widthInTiles,
             shadowInTiles: entry.shadowInTiles ?? widthInTiles * 0.9,
+            buildingPx: entry.buildingPx ?? img.width,
+            topPx: entry.topPx ?? 0,
           };
         });
         this.placeholders.set('real:' + category, cached);
@@ -283,7 +293,7 @@ export class TileKit {
   }
 
   private sprite(c: HTMLCanvasElement, anchor: [number, number], widthInTiles: number): Sprite3D {
-    return { texture: Texture.from(c), aspect: c.width / c.height, anchor, widthInTiles, shadowInTiles: widthInTiles * 0.9 };
+    return { texture: Texture.from(c), aspect: c.width / c.height, anchor, widthInTiles, shadowInTiles: widthInTiles * 0.9, buildingPx: c.width, topPx: 0 };
   }
 
   private makePlaceholder(category: string): Sprite3D[] {
@@ -407,6 +417,29 @@ export class TileKit {
         out.push(this.sprite(c, [0.5, 0.8], 2.2));
         break;
       }
+      case 'objects.smoke': {
+        const { c, g } = canvas(32, 32);
+        const grad = g.createRadialGradient(16, 16, 0, 16, 16, 15);
+        grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+        grad.addColorStop(0.55, 'rgba(235,235,235,0.55)');
+        grad.addColorStop(1, 'rgba(220,220,220,0)');
+        g.fillStyle = grad;
+        g.beginPath();
+        g.arc(16, 16, 15, 0, Math.PI * 2);
+        g.fill();
+        out.push(this.sprite(c, [0.5, 0.5], 1));
+        break;
+      }
+      case 'objects.seagull':
+        // two flap frames (wings up, wings down), centred; code-drawn until the pixel art is in the manifest
+        for (const up of [true, false]) {
+          const { c, g } = canvas(32, 32);
+          ellipse(g, 16, 16, 7, 3.5, '#dfdfdf');
+          poly(g, [[16, 15], [up ? 6 : 8, up ? 6 : 21], [up ? 12 : 13, 16]], '#9f9f9f');
+          poly(g, [[17, 15], [up ? 27 : 25, up ? 6 : 21], [up ? 20 : 19, 16]], '#bdbcbc');
+          out.push(this.sprite(c, [0.5, 0.5], 1));
+        }
+        break;
       case 'objects.shadow': {
         const { c, g } = canvas(64, 32);
         softShadow(g, 32, 16, 30, 14, 0.45);
@@ -467,6 +500,10 @@ export class TileKit {
   hasArt(category: string): boolean {
     return (this.art.get(category)?.length ?? 0) > 0;
   }
+  /** A house of 1 to 4 floors (a file; taller = more code); `hash` picks the variant. */
+  house(floors: number, hash: number): Sprite3D {
+    return this.pick('objects.house.' + Math.min(4, Math.max(1, floors)), hash);
+  }
   /** One house of the given size (a file or function); `hash` picks the variant. */
   hut(size: 'small' | 'medium' | 'large', hash: number): Sprite3D {
     return this.pick('objects.hut.' + size, hash);
@@ -484,6 +521,14 @@ export class TileKit {
   }
   tree(kind: TreeKind, hash: number): Sprite3D {
     return this.pick('objects.tree.' + kind, hash);
+  }
+  /** All the frames of an animation, in manifest order (not a random pick), e.g. the two seagull flaps. */
+  frames(category: string): Sprite3D[] {
+    return this.sprites(category);
+  }
+  /** A soft round puff of smoke. */
+  get smoke(): Sprite3D {
+    return this.pick('objects.smoke', 0);
   }
   /** A campfire (flames in a ring of stones). */
   campfire(hash: number): Sprite3D {

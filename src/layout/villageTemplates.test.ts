@@ -30,6 +30,37 @@ describe('planVillage', () => {
       for (const f of plan.fires) expect(plan.plazas.map(key)).toContain(key(f));
     }
   });
+  it('connects every house to the others with paths (one web, 4-connected)', () => {
+    for (const [n, seed] of [[1, 'a'], [3, 'b'], [6, 'c'], [10, 'd'], [18, 'e'], [30, 'f']] as const) {
+      const plan = planVillage(n, disc(15), seed)!;
+      const net = new Set([...plan.plazas, ...plan.paths, ...plan.houses].map(key));
+      // flood fill from the first house through path, plaza and house cells
+      const start = plan.houses[0];
+      const seen = new Set<number>([key(start)]);
+      const stack = [start];
+      while (stack.length) {
+        const [x, y] = stack.pop()!;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const k = (y + dy) * 100 + (x + dx);
+          if (net.has(k) && !seen.has(k)) {
+            seen.add(k);
+            stack.push([x + dx, y + dy]);
+          }
+        }
+      }
+      for (const h of plan.houses) expect(seen.has(key(h)), `n=${n} ${seed}`).toBe(true);
+    }
+  });
+  it('never lays a path over a house seed', () => {
+    const plan = planVillage(14, disc(15), 'p')!;
+    const seeds = new Set(plan.houses.map(key));
+    for (const c of [...plan.paths, ...plan.plazas]) expect(seeds.has(key(c))).toBe(false);
+  });
+  it('has at most one campfire per village', () => {
+    for (let k = 0; k < 60; k++) {
+      for (const n of [2, 5, 9, 16, 30]) expect(planVillage(n, disc(15), `s${k}`)!.fires.length, `n=${n} s${k}`).toBeLessThanOrEqual(1);
+    }
+  });
   it('keeps houses apart on a roomy islet', () => {
     const plan = planVillage(10, disc(16), 'roomy')!;
     for (let a = 0; a < plan.houses.length; a++) {

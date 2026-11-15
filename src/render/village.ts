@@ -1,11 +1,10 @@
 /**
- * One house per file or function. Pure and seeded (no Math.random): given the houses of a village (their tile
- * patches and their code size) it says which art size each gets and how big to draw it.
+ * One house per file. Pure and seeded (no Math.random): given the houses of a village (their tile patches and their
+ * code size) it says how tall each is and how wide to draw it.
  *
- *  - Size by rank within the village: the biggest 15% are large buildings, the next 35% medium houses, the rest
- *    small huts, so every village has a mix and the biggest code stands out.
- *  - A tiny patch of tiles always gets a small hut (and a small one at most a medium), so a big building never
- *    spills onto its neighbours' patches.
+ *  - Every house is the same width: a village is a cluster of houses, not one big building.
+ *  - Code size sets the height instead: floors = 1 for a file of median size or smaller, one more floor roughly each
+ *    time the file doubles (up to MAX_FLOORS), so the biggest files are the tallest buildings.
  *  - A big village shows buildings for its biggest MAX_HOUSES houses only; the rest keep just their patch of ground.
  */
 
@@ -26,21 +25,27 @@ export interface HousePlacement {
   id: string;
   x: number;
   y: number;
+  /** Storeys, 1..MAX_FLOORS. */
+  floors: number;
+  /** Art class for the fallback huts (when the manifest has no multi-floor houses). */
   size: HouseSize;
   /** Hash of the id (0..2^32): picks the art variant and mirroring. */
   hash: number;
-  /** Drawn width of the whole 32 px canvas, in cells. */
+  /** Width of the building (not the whole image), in cells: the same for every house. */
+  width: number;
+  /** Fallback huts: drawn width of the whole 32 px canvas, in cells. */
   widthInTiles: number;
   /** Width of the shadow under the building, in cells. */
   shadowInTiles: number;
 }
 
-export const LARGE_SHARE = 0.15;
-export const MEDIUM_SHARE = 0.35;
 export const MAX_HOUSES = 40;
-/** Widest a building may be drawn, in cells. */
-export const MAX_BUILDING = 2.6;
-/** Pixels of the 32 px canvas the building itself covers, per size (from the art). */
+export const MAX_FLOORS = 4;
+/** How wide every house is drawn, in cells. */
+export const HOUSE_WIDTH = 1.3;
+/** Extra floors per doubling of code size above the village's median file. */
+export const FLOORS_PER_DOUBLING = 0.8;
+/** Pixels of the 32 px canvas a fallback hut covers, per art size. */
 const BUILDING_PX: Record<HouseSize, number> = { small: 11, medium: 17, large: 24 };
 
 export function hashString(s: string): number {
@@ -52,24 +57,29 @@ export function hashString(s: string): number {
   return h >>> 0;
 }
 
+/** Floors for a file of `size` lines in a village whose median file has `median` lines. */
+export function floorsFor(size: number, median: number): number {
+  if (!(median > 0) || !(size > 0)) return 1;
+  return Math.min(MAX_FLOORS, Math.max(1, Math.round(1 + FLOORS_PER_DOUBLING * Math.log2(size / median))));
+}
+
 export function placeHouses(houses: HouseInput[]): HousePlacement[] {
+  const sizes = houses.map((h) => h.size).sort((a, b) => a - b);
+  const median = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 0;
   const ranked = [...houses].sort((a, b) => b.size - a.size || b.n - a.n || a.id.localeCompare(b.id)).slice(0, MAX_HOUSES);
-  const count = ranked.length;
-  return ranked.map((h, rank) => {
-    const share = (rank + 0.5) / count;
-    let size: HouseSize = share < LARGE_SHARE && count >= 4 ? 'large' : share < LARGE_SHARE + MEDIUM_SHARE ? 'medium' : 'small';
-    if (h.n <= 2) size = 'small';
-    else if (h.n <= 5 && size === 'large') size = 'medium';
-    // The building covers about 0.45 x sqrt(tiles) cells across, within sensible limits.
-    const building = Math.min(MAX_BUILDING, Math.max(0.8, 0.45 * Math.sqrt(h.n)));
+  return ranked.map((h) => {
+    const floors = floorsFor(h.size, median);
+    const size: HouseSize = floors >= 3 ? 'large' : 'medium';
     return {
       id: h.id,
       x: h.x,
       y: h.y,
+      floors,
       size,
       hash: hashString(h.id),
-      widthInTiles: (building * 32) / BUILDING_PX[size],
-      shadowInTiles: building * 1.1,
+      width: HOUSE_WIDTH,
+      widthInTiles: (HOUSE_WIDTH * 32) / BUILDING_PX[size],
+      shadowInTiles: HOUSE_WIDTH * 1.1,
     };
   });
 }

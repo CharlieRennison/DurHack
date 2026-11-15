@@ -3,8 +3,13 @@ import { GRID_SIZE, type Grid, type RepoNode, type Tile } from '../types';
 import { effectiveChildren, forgetNode, isVillage, LOOSE_FILES_SUFFIX } from '../layout/children';
 import { gridToScreen, screenToCell, TILE_H, TILE_W } from './iso';
 import { HIGHLIGHT, PALETTE, WATER } from './palette';
+import { Gulls } from './gulls';
+import {
+  boatAt, boatsFor, centreOf, dashes, dockFor, lanesFor, lengthOf, pointAt, seeded, slice, smooth, waterRoute, type ImportEdge,
+} from './seaLanes';
+import { makeWalkers, stepWalker, walkableCells, walkerFrame, type Walker } from './people';
 import { placeScenery } from './scenery';
-import { placeHouses } from './village';
+import { HOUSE_WIDTH, placeHouses } from './village';
 import { Edge, loadTileKit, type Sprite3D, type TileKit } from './tiles';
 
 export interface HoverInfo {
@@ -57,6 +62,29 @@ interface View {
   /** Files shown here that have no children yet (live mode may still load their functions). */
   pending: Island[];
   kids: Map<string, View>;
+  /** Trees the parent level draws on a village islet's grass; they fade out as that village's own view fades in. */
+  villageTrees: Map<string, Container>;
+  /** Names above this village view's houses. */
+  houseLabels: HouseLabel[];
+  /**
+   * Ground and scenery of each child islet that has a view of its own, kept apart so the islet can fade out exactly as
+   * its view fades in (no flat blob with oversized trees left showing through).
+   */
+  ownerLayers: Map<string, Container>;
+  /** Boats sailing between this view's islands (sea lanes for imports), in their own layer above the scenery. */
+  boatLayer: Container | null;
+}
+
+/** A file's name floating above its house. Lives in the shared labels layer, at constant screen size. */
+interface HouseLabel {
+  label: Text;
+  view: View;
+  /** Anchor point (the top of the house) in root world units. */
+  x: number;
+  y: number;
+  size: { w: number; h: number };
+  /** Taller (more code) wins when labels overlap. */
+  rank: number;
 }
 
 interface Cell {
@@ -67,6 +95,9 @@ interface Cell {
   variant: number;
 }
 
+/** Campfire smoke: puffs per fire and how fast each one lives its life (1 = once per second). */
+const SMOKE_PUFFS = 7;
+const SMOKE_SPEED = 0.2;
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 5000;
 /** Detail fades in between these sizes (view size relative to the fit scale). */
@@ -126,8 +157,29 @@ export class Renderer {
   private pointer: { x: number; y: number } | null = null;
   private hover: { view: View; x: number; y: number } | null = null;
   private labelViews: View[] = [];
+  /** Which files import which, and the boats that show it: one sea lane per pair of linked islands in a view. */
+  private imports: ImportEdge[] = [];
+  private drawnViews: View[] = [];
+  private boats: {
+    view: View; pts: [number, number][]; L: number; speed: number; phase: number; sprite: Sprite; frames: Texture[];
+    from: string; to: string; ab: number; ba: number; lastDir: number;
+  }[] = [];
+  private boatOverlay: Graphics | null = null;
+  private boatLabel: Text | null = null;
+  private hoveredBoat = -1;
+  private boatClock = 0;
+  /** Collaborators' names, and the little people who walk the root island for them. */
+  private collaborators: string[] = [];
+  private homeSpot: { view: View; walkable: boolean[][]; cells: [number, number][] } | null = null;
+  private people: { walker: Walker; sprite: Sprite; frames: Texture[] }[] = [];
+  private personLabel: Text | null = null;
+  private hoveredPerson = -1;
+  private peopleClock = 0;
+  /** Seagulls flying across the foreground (null until the tile art is loaded). */
+  private gulls: Gulls | null = null;
+  private houseLabels: HouseLabel[] = [];
   /** Campfires on screen-able village views, flickered every frame while their view is visible. */
-  private fires: { sprite: Sprite; glow: Sprite; view: View; phase: number; base: number }[] = [];
+  private fires: { sprite: Sprite; glow: Sprite; view: View; phase: number; base: number; smoke: Sprite[]; x: number; y: number; h: number; w: number }[] = [];
   private chain: View[] = [];
   private chainKey = '';
   /** Tile kit (manifest art with code-drawn placeholders); null only if it failed to build, then flat colours are drawn. */
@@ -150,8 +202,13 @@ export class Renderer {
     this.app.stage.addChild(this.world);
     this.bindInput(this.app.canvas);
     this.app.ticker.add(() => this.animateFires());
+    this.app.ticker.add(() => this.gulls?.update(this.app.ticker.deltaMS / 1000));
+    this.app.ticker.add(() => this.animatePeople(Math.min(this.app.ticker.deltaMS / 1000, 0.1)));
+    this.app.ticker.add(() => this.animateBoats(Math.min(this.app.ticker.deltaMS / 1000, 0.1)));
     try {
       this.kit = await loadTileKit();
+      this.gulls = new Gulls(this.kit.frames('objects.seagull').map((f) => f.texture), () => ({ w: this.app.screen.width, h: this.app.screen.height, x: this.world.position.x, y: this.world.position.y, scale: this.world.scale.x, ref: this.fit * 3 }));
+      this.app.stage.addChild(this.gulls.layer); // follows the world's camera, above it; ignores the mouse
     } catch (e) {
       console.warn('Tile art unavailable, using flat colours:', e);
     }
@@ -165,11 +222,328 @@ export class Renderer {
     this.world.removeChildren().forEach((c) => c.destroy({ children: true }));
     this.labels = new Container();
     this.labelViews = [];
+    this.houseLabels = [];
+    this.people = [];
+    this.collaborators = []; // the new repo's names arrive with setCollaborators
+    this.imports = []; // and its import links with setImports
+    this.boats = [];
+    this.drawnViews = [];
+    this.boatOverlay = null;
+    this.boatLabel = null;
+    this.hoveredBoat = -1;
+    this.homeSpot = null;
+    this.personLabel = null;
+    this.hoveredPerson = -1;
     this.fires = [];
     this.root = this.makeView(root, 0, undefined, undefined);
     this.world.addChild(this.root.container, this.labels);
     this.fitCamera();
     this.refresh();
+  }
+
+  /** Which files import which (edges by file path): boats sail between the islands that are linked. */
+  setImports(edges: ImportEdge[]): void {
+    this.imports = edges;
+    for (const v of this.drawnViews) this.spawnBoats(v);
+  }
+
+  /** (Re)create the boats for one view: a sea lane per pair of linked child islands, 1-3 boats on each. */
+  private spawnBoats(v: View): void {
+    this.boats = this.boats.filter((b) => {
+      if (b.view !== v) return true;
+      b.sprite.destroy();
+      return false;
+    });
+    this.hoveredBoat = -1;
+    const kit = this.kit;
+    if (!kit || !kit.hasArt('objects.boat') || this.imports.length === 0 || isVillage(v.node)) return;
+    const children = effectiveChildren(v.node).filter((c) => c.kind === 'folder');
+    if (children.length < 2) return;
+    const lanes = lanesFor(children, this.imports, effectiveChildren);
+    if (lanes.length === 0) return;
+    if (!v.boatLayer) {
+      // On top of the whole view, child islands included: a boat sails right up to an island's shore, which is
+      // drawn by that island's own view (above this one's ground).
+      v.boatLayer = new Container();
+      v.container.addChild(v.boatLayer);
+    }
+    const frames = kit.frames('objects.boat');
+    const textures = frames.map((f) => f.texture);
+    for (const lane of lanes) {
+      const A = children[lane.a];
+      const B = children[lane.b];
+      const ca = centreOf(v.grid, A.id);
+      const cb = centreOf(v.grid, B.id);
+      if (!ca || !cb) continue;
+      const da = dockFor(v.grid, A.id, cb, v.allowed);
+      const db = dockFor(v.grid, B.id, ca, v.allowed);
+      if (!da || !db) continue;
+      const route = waterRoute(v.grid, da, db, v.allowed);
+      if (!route || route.length < 2) continue;
+      // Each end goes on from the dock, through the island's own shallows, to just off its nearest shore: a boat
+      // starts at one island and ends at the other, not out in the open sea.
+      const pts = smooth(route);
+      const landA = this.landOf(v, A);
+      const landB = this.landOf(v, B);
+      const shoreA = this.shoreNear(landA, pts[0]);
+      const shoreB = this.shoreNear(landB, pts[pts.length - 1]);
+      if (shoreA) pts.unshift(shoreA);
+      if (shoreB) pts.push(shoreB);
+      const L = lengthOf(pts);
+      const seed = `${v.node.id}|${A.id}|${B.id}`;
+      for (let k = 0; k < boatsFor(lane.ab + lane.ba); k++) {
+        const sprite = new Sprite(textures[0]);
+        sprite.anchor.set(frames[0].anchor[0], frames[0].anchor[1]);
+        sprite.width = TILE_W * 0.7; // boats are small next to the islands
+        sprite.height = sprite.width / frames[0].aspect;
+        v.boatLayer.addChild(sprite);
+        this.boats.push({
+          view: v, pts, L, sprite, frames: textures,
+          speed: 0.9 + seeded(seed, k, 1) * 0.7, // cells per second, a little different for every boat
+          phase: seeded(seed, k), // where in its back-and-forth it starts: anywhere along the lane
+          from: A.name, to: B.name, ab: lane.ab, ba: lane.ba, lastDir: 1,
+        });
+      }
+    }
+  }
+
+  /**
+   * Where child island `c` has land, in this view's cell coordinates. An island with a view of its own shows its own
+   * islets (a cluster): their land is mapped up from its grid. A village sits on this view's islet: that land is used.
+   */
+  private landOf(v: View, c: RepoNode): [number, number][] {
+    const out: [number, number][] = [];
+    const isl = this.islandsOf(v).find((x) => x.child.id === c.id);
+    const isLand = (t: Tile) => t.type === 'island' || t.type === 'coast' || t.type === 'port' || t.type === 'tree';
+    if (isl && !isVillage(c)) {
+      const fp = isl.footprint;
+      const grid = this.gridFor(c, v.depth + 1, this.allowedFor(v, fp, c));
+      grid.forEach((row, j) => row.forEach((t, i) => {
+        if (isLand(t)) out.push([fp.bx + (i + 0.5) * fp.s, fp.by + (j + 0.5) * fp.s]);
+      }));
+    }
+    if (out.length === 0) {
+      v.grid.forEach((row, y) => row.forEach((t, x) => {
+        if (t.nodeId === c.id && isLand(t)) out.push([x + 0.5, y + 0.5]);
+      }));
+    }
+    return out;
+  }
+
+  /** A point just off the shore of `land` nearest to `from` (on the way in from `from`), or null if there is no land. */
+  private shoreNear(land: [number, number][], from: [number, number]): [number, number] | null {
+    let best: [number, number] | null = null;
+    let bd = Infinity;
+    for (const p of land) {
+      const d = Math.hypot(p[0] - from[0], p[1] - from[1]);
+      if (d < bd) {
+        bd = d;
+        best = p;
+      }
+    }
+    if (!best || bd < 0.6) return null;
+    const stop = 0.55; // stay this far (cells) off the land itself
+    const k = (bd - stop) / bd;
+    return [from[0] + (best[0] - from[0]) * k, from[1] + (best[1] - from[1]) * k];
+  }
+
+  /** Sail the boats, and on hover draw where the boat has been this trip and where it is going. */
+  private animateBoats(dt: number): void {
+    if (this.boats.length === 0) return;
+    this.boatClock += dt;
+    const t = this.boatClock;
+    // keep every view's boats above the child views that appear in it as you zoom
+    for (const v of new Set(this.boats.map((b) => b.view))) {
+      const bl = v.boatLayer;
+      if (bl && bl.parent === v.container && v.container.children[v.container.children.length - 1] !== bl) v.container.addChild(bl);
+    }
+    for (const b of this.boats) {
+      const shown = b.view.container.visible;
+      b.sprite.visible = shown;
+      if (!shown) continue;
+      const st = boatAt(b.L, b.speed, b.phase, t);
+      if (st.dir !== 0) b.lastDir = st.dir;
+      const p = pointAt(b.pts, st.s);
+      const pos = gridToScreen(p.x, p.y);
+      b.sprite.position.set(pos.x, pos.y + Math.sin(t * 2.2 + b.phase * 9) * 0.8);
+      b.sprite.texture = b.frames[Math.floor(t * 2 + b.phase * 4) % b.frames.length];
+      const screenDx = (p.dx - p.dy) * b.lastDir; // iso: screen x grows with x - y
+      const sx = Math.abs(b.sprite.scale.x);
+      if (Math.abs(screenDx) > 1e-3) b.sprite.scale.x = screenDx > 0 ? sx : -sx; // the art faces right
+    }
+    // hover: the front-most boat under the pointer
+    let hit = -1;
+    if (this.pointer) {
+      const rect = this.app.canvas.getBoundingClientRect();
+      const px = this.pointer.x - rect.left;
+      const py = this.pointer.y - rect.top;
+      this.boats.forEach((b, k) => {
+        if (!b.sprite.visible) return;
+        const r = b.sprite.getBounds();
+        const pad = 6;
+        if (px >= r.x - pad && px <= r.x + r.width + pad && py >= r.y - pad && py <= r.y + r.height + pad) hit = k;
+      });
+    }
+    if (hit !== this.hoveredBoat) {
+      this.hoveredBoat = hit;
+      if (this.hoveredPerson < 0) this.app.canvas.style.cursor = hit >= 0 ? 'pointer' : '';
+    }
+    if (hit < 0) {
+      if (this.boatOverlay) this.boatOverlay.visible = false;
+      if (this.boatLabel) this.boatLabel.visible = false;
+      return;
+    }
+    const b = this.boats[hit];
+    const v = b.view;
+    const st = boatAt(b.L, b.speed, b.phase, t);
+    // sailed this trip: from the dock it left to here; still to go: from here to the dock it is heading for
+    let done: [number, number][] = [];
+    let todo: [number, number][] = [];
+    let goalEnd: number;
+    if (st.dir > 0) {
+      done = slice(b.pts, 0, st.s);
+      todo = slice(b.pts, st.s, b.L);
+      goalEnd = b.L;
+    } else if (st.dir < 0) {
+      done = slice(b.pts, st.s, b.L);
+      todo = slice(b.pts, 0, st.s);
+      goalEnd = 0;
+    } else {
+      // waiting at a dock: the trip just made is behind it, the way back is ahead
+      done = b.pts;
+      todo = b.pts;
+      goalEnd = st.s === 0 ? b.L : 0;
+    }
+    if (!this.boatOverlay) this.boatOverlay = new Graphics();
+    const g = this.boatOverlay;
+    if (g.parent !== v.boatLayer) v.boatLayer?.addChildAt(g, 0);
+    g.visible = true;
+    g.clear();
+    const lw = 2.4 / (this.world.scale.x * v.f);
+    const toScreen = (pts: [number, number][]) => pts.map(([x, y]) => gridToScreen(x, y));
+    const sailed = toScreen(done);
+    if (st.dir !== 0 && sailed.length > 1) {
+      g.moveTo(sailed[0].x, sailed[0].y);
+      for (const q of sailed.slice(1)) g.lineTo(q.x, q.y);
+      g.stroke({ width: lw, color: 0xffffff, alpha: 0.9 });
+    }
+    const march = -t * b.speed; // dashes flow the way the boat is going
+    for (const [p0, p1] of dashes(st.dir < 0 ? [...todo].reverse() : todo, 0.45, 0.35, st.dir < 0 ? -march : march)) {
+      const a = gridToScreen(p0[0], p0[1]);
+      const c = gridToScreen(p1[0], p1[1]);
+      g.moveTo(a.x, a.y).lineTo(c.x, c.y);
+    }
+    g.stroke({ width: lw, color: 0xfff3a0, alpha: 0.95 });
+    const goal = pointAt(b.pts, goalEnd);
+    const start = pointAt(b.pts, goalEnd === 0 ? b.L : 0);
+    const gp = gridToScreen(goal.x, goal.y);
+    const sp = gridToScreen(start.x, start.y);
+    g.circle(gp.x, gp.y, lw * 3).fill({ color: 0xfff3a0, alpha: 0.95 });
+    g.circle(sp.x, sp.y, lw * 2.4).stroke({ width: lw * 0.8, color: 0xffffff, alpha: 0.9 });
+    // the label: who imports whom, and how often
+    if (!this.boatLabel) {
+      this.boatLabel = new Text({
+        text: '',
+        style: { fontSize: 12, fontWeight: '700', fill: 0xffffff, stroke: { color: 0x10233a, width: 4 }, align: 'center' },
+        resolution: 2,
+      });
+      this.boatLabel.anchor.set(0.5, 1);
+      this.labels.addChild(this.boatLabel);
+    }
+    // heading back (or waiting at the far dock, about to head back): to -> from; otherwise from -> to
+    const heading = st.dir < 0 || (st.dir === 0 && st.s > 0) ? `${b.to} → ${b.from}` : `${b.from} → ${b.to}`;
+    const counts = `${b.from} imports ${b.to}: ${b.ab}` + (b.ba ? `\n${b.to} imports ${b.from}: ${b.ba}` : '');
+    const text = `${heading}\n${counts}`;
+    if (this.boatLabel.text !== text) this.boatLabel.text = text;
+    const sc = this.world.scale.x;
+    this.boatLabel.position.set(v.ox + v.f * b.sprite.x, v.oy + v.f * (b.sprite.y - b.sprite.height) - 6 / sc);
+    this.boatLabel.scale.set(1 / sc);
+    this.boatLabel.visible = true;
+  }
+
+  /** The repository's collaborators: a little person walks the root island for each of them. */
+  setCollaborators(names: string[]): void {
+    this.collaborators = names;
+    this.spawnPeople();
+  }
+
+  /** (Re)create the walking people on the root island from the current names. */
+  private spawnPeople(): void {
+    for (const p of this.people) p.sprite.destroy();
+    this.people = [];
+    this.hoveredPerson = -1;
+    const home = this.homeSpot;
+    const kit = this.kit;
+    if (!home || !kit || !kit.hasArt('objects.person.0') || this.collaborators.length === 0) return;
+    const pxCells = HOUSE_WIDTH / 16; // the same pixel scale as the houses
+    for (const walker of makeWalkers(this.collaborators, home.walkable, home.view.node.id)) {
+      const frames = kit.frames('objects.person.' + walker.variant);
+      const sprite = new Sprite(frames[0].texture);
+      sprite.anchor.set(frames[0].anchor[0], frames[0].anchor[1]);
+      sprite.width = TILE_W * frames[0].texture.width * pxCells;
+      sprite.height = sprite.width / frames[0].aspect;
+      home.view.layer.addChild(sprite);
+      this.people.push({ walker, sprite, frames: frames.map((f) => f.texture) });
+    }
+  }
+
+  /** Walk the people, and show a name above whoever the pointer is on. */
+  private animatePeople(dt: number): void {
+    const home = this.homeSpot;
+    if (!home || this.people.length === 0) return;
+    this.peopleClock += dt;
+    const shown = home.view.container.visible;
+    const baseScale = this.people[0].sprite.scale.x < 0 ? -this.people[0].sprite.scale.x : this.people[0].sprite.scale.x;
+    this.people.forEach((p, k) => {
+      stepWalker(p.walker, dt, home.walkable, home.cells);
+      const pos = gridToScreen(p.walker.x, p.walker.y);
+      p.sprite.visible = shown;
+      p.sprite.position.set(pos.x, pos.y);
+      p.sprite.zIndex = p.walker.x + p.walker.y + 1 + 0.0005 * (k + 1);
+      p.sprite.texture = p.frames[walkerFrame(p.walker, this.peopleClock)] ?? p.frames[0];
+      p.sprite.scale.x = p.walker.facingRight ? baseScale : -baseScale;
+    });
+    // hover: the person under the pointer (the front-most one if several overlap)
+    let hit = -1;
+    if (shown && this.pointer) {
+      const rect = this.app.canvas.getBoundingClientRect();
+      const px = this.pointer.x - rect.left;
+      const py = this.pointer.y - rect.top;
+      let bestZ = -Infinity;
+      this.people.forEach((p, k) => {
+        const b = p.sprite.getBounds();
+        const pad = 5;
+        if (px >= b.x - pad && px <= b.x + b.width + pad && py >= b.y - pad && py <= b.y + b.height + pad && p.sprite.zIndex > bestZ) {
+          bestZ = p.sprite.zIndex;
+          hit = k;
+        }
+      });
+    }
+    if (hit !== this.hoveredPerson) {
+      this.hoveredPerson = hit;
+      this.app.canvas.style.cursor = hit >= 0 ? 'pointer' : '';
+    }
+    if (hit >= 0) {
+      const p = this.people[hit];
+      if (!this.personLabel) {
+        this.personLabel = new Text({
+          text: '',
+          style: { fontSize: 13, fontWeight: '700', fill: 0xffffff, stroke: { color: 0x10233a, width: 4 } },
+          resolution: 2,
+        });
+        this.personLabel.anchor.set(0.5, 1);
+        this.labels.addChild(this.personLabel);
+      }
+      const l = this.personLabel;
+      if (l.text !== p.walker.name) l.text = p.walker.name;
+      const v = home.view;
+      const sc = this.world.scale.x;
+      l.position.set(v.ox + v.f * p.sprite.x, v.oy + v.f * (p.sprite.y - p.sprite.height) - 4 / sc);
+      l.scale.set(1 / sc);
+      l.visible = true;
+    } else if (this.personLabel) {
+      this.personLabel.visible = false;
+    }
   }
 
   /** Fly the camera to the level at `index` of the current breadcrumb chain. */
@@ -250,7 +624,7 @@ export class Renderer {
     }
     return {
       node, depth, grid: this.gridFor(node, depth, allowed), allowed, parent, footprint,
-      f, ox, oy, container, gfx, layer, drawn: false, alpha: 1, label: null, labelSize: null, islands: null, pending: [], kids: new Map(),
+      f, ox, oy, container, gfx, layer, drawn: false, alpha: 1, label: null, labelSize: null, islands: null, pending: [], kids: new Map(), villageTrees: new Map(), houseLabels: [], ownerLayers: new Map(), boatLayer: null,
     };
   }
 
@@ -303,6 +677,8 @@ export class Renderer {
     for (const child of effectiveChildren(v.node)) {
       const b = bounds.get(child.id);
       if (!b) continue;
+      // A file is a house and nothing more: there is no layer of functions to zoom into.
+      if (child.kind === 'file') continue;
       const w = b.x1 - b.x0 + 1;
       const h = b.y1 - b.y0 + 1;
       const side = Math.max(w, h);
@@ -311,7 +687,6 @@ export class Renderer {
         footprint: { bx: b.x0 + w / 2 - side / 2, by: b.y0 + h / 2 - side / 2, s: side / GRID_SIZE },
       };
       if (child.children.length > 0) v.islands.push(island);
-      else if (child.kind === 'file' && this.loadChildren) v.pending.push(island);
     }
     return v.islands;
   }
@@ -419,7 +794,19 @@ export class Renderer {
     }
 
     // --- ground; collect standing objects to draw after (sorted back to front) ---
-    const decor: { gx: number; gy: number; sprite: Sprite; shadow?: Sprite }[] = [];
+    const decor: { gx: number; gy: number; sprite: Sprite; shadow?: Container; owner?: string }[] = [];
+    // child islets (not villages) that have a view of their own: their ground and trees go in a container each
+    const fadeIds = new Set(effectiveChildren(v.node).filter((c) => c.kind === 'folder' && !isVillage(c) && c.children.length > 0).map((c) => c.id));
+    const ownerLayer = (owner?: string): Container => {
+      if (!owner || !fadeIds.has(owner)) return layer;
+      let c = v.ownerLayers.get(owner);
+      if (!c) {
+        c = new Container();
+        layer.addChild(c);
+        v.ownerLayers.set(owner, c);
+      }
+      return c;
+    };
     const houses = new Map<string, { sx: number; sy: number; n: number }>();
     const isWater = (x: number, y: number) =>
       x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE || grid[y][x].type === 'ocean' || grid[y][x].type === 'coral';
@@ -458,7 +845,12 @@ export class Renderer {
     const seedX = (seedH % 997) * 3.17;
     const seedY = ((seedH >>> 10) % 991) * 2.71;
 
+    const smokeLayer = new Container(); // campfire smoke, above everything else in this view
+    const blockedCells = new Set<number>(); // cells people cannot walk through: trees
     const sceneryCells = new Map<string, { i: number; j: number }[]>();
+    // A village islet's trees are kept apart: seen from here they dress the islet, but once the village's own view
+    // fades in (with its houses, paths and its own trees, all depth-sorted together) these fade out.
+    const villageIds = new Set(effectiveChildren(v.node).filter((c) => isVillage(c)).map((c) => c.id));
     for (const { i, j, type } of cells) {
       const hash = ((Math.imul(i + 1, 73856093) ^ Math.imul(j + 1, 19349663) ^ Math.imul(v.depth + 7, 83492791)) >>> 0) % 1000;
       if (type === 'village') {
@@ -474,7 +866,21 @@ export class Renderer {
           glow.blendMode = 'add';
           glow.alpha = 0.3;
           decor.push({ gx: i + j + 0.4, gy: 0, sprite: sp, shadow: glow });
-          this.fires.push({ sprite: sp, glow, view: v, phase: ((hash * 7) % 628) / 100, base: sp.scale.y });
+          // Smoke: a few soft puffs that start at the top of the flames and rise (see animateFires). They sit in
+          // their own layer above the houses, and use the same bounds as the campfire sprite.
+          const smoke: Sprite[] = [];
+          for (let k = 0; k < SMOKE_PUFFS; k++) {
+            const puff = new Sprite(kit.smoke.texture);
+            puff.anchor.set(0.5);
+            puff.tint = 0xe6e6e6;
+            puff.alpha = 0;
+            smokeLayer.addChild(puff);
+            smoke.push(puff);
+          }
+          this.fires.push({
+            sprite: sp, glow, view: v, phase: ((hash * 7) % 628) / 100, base: sp.scale.y,
+            smoke, x: sp.x, y: sp.y - sp.height * 0.61, h: sp.height, w: sp.width,
+          });
         }
       } else if (type === 'island' || type === 'coast' || type === 'port' || type === 'tree') {
         const kind = type === 'coast' || type === 'port' ? 'sand' : 'grass';
@@ -506,7 +912,7 @@ export class Renderer {
           const shade = 226 + Math.round(valueNoise(i * 0.09 + seedY, j * 0.09 + seedX) * 29);
           ground.tint = (shade << 16) | (shade << 8) | shade;
         }
-        layer.addChild(ground);
+        ownerLayer(grid[j][i].nodeId).addChild(ground);
         if (type === 'port') {
           const dock = this.objectSprite(kit.port(hash), i + 0.5, j + 0.5);
           decor.push({ gx: i + j + 0.5, gy: 0, sprite: dock });
@@ -532,24 +938,110 @@ export class Renderer {
     }
 
     for (const [owner, list] of sceneryCells) {
-      for (const p of placeScenery(list, owner)) {
-        const art = p.kind === 'rock' ? kit.rock(p.hash) : p.kind === 'tuft' ? kit.tuft(p.hash) : kit.tree(p.kind, p.hash);
-        const gx = p.i + 0.5 + p.dx;
-        const gy = p.j + 0.5 + p.dy;
-        const sp = this.objectSprite(art, gx, gy, 1, TILE_H * 0.3);
-        if (p.hash % 2 === 1) sp.scale.x = -sp.scale.x; // mirror half of them: same tree, different look
-        const shade = 232 + ((p.hash >> 5) % 24); // slight brightness variation
-        sp.tint = (shade << 16) | (shade << 8) | shade;
-        const sh = this.objectSprite(kit.shadow, gx, gy, art.shadowInTiles / kit.shadow.widthInTiles, TILE_H * 0.3);
-        sh.alpha = 0.8;
-        decor.push({ gx: p.i + p.j + p.dx + p.dy, gy: 0, sprite: sp, shadow: sh });
+      if (!villageIds.has(owner)) {
+        this.addScenery(kit, placeScenery(list, owner), decor, owner);
+        continue;
       }
+      const own: { gx: number; gy: number; sprite: Sprite; shadow?: Container }[] = [];
+      this.addScenery(kit, placeScenery(list, owner), own);
+      own.sort((a, b) => a.gx - b.gx);
+      const holder = new Container();
+      for (const d of own) {
+        if (d.shadow) holder.addChild(d.shadow);
+        holder.addChild(d.sprite);
+      }
+      layer.addChild(holder);
+      v.villageTrees.set(owner, holder);
+    }
+
+    // The village's own trees: on the free ground of its islet, away from houses, paths and campfires.
+    if (v.footprint && v.allowed && isVillage(v.node)) {
+      const allowed = v.allowed;
+      const near = (x: number, y: number, r: number, test: (t: Tile) => boolean) => {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            const t = grid[y + dy]?.[x + dx];
+            if (t && test(t)) return true;
+          }
+        }
+        return false;
+      };
+      const free: { i: number; j: number }[] = [];
+      for (let j = 1; j < GRID_SIZE - 1; j++) {
+        for (let i = 1; i < GRID_SIZE - 1; i++) {
+          if (!allowed[j][i] || grid[j][i].type !== 'ocean') continue;
+          // inland (every neighbour is usable ground) and clear of buildings, paths and plazas by a cell
+          if (!allowed[j - 1][i] || !allowed[j + 1][i] || !allowed[j][i - 1] || !allowed[j][i + 1]) continue;
+          if (near(i, j, 0, (t) => t.type === 'house' || t.type === 'village')) continue; // not on a house patch, path or plaza
+          // and standing on real grass of the islet below, with grass all round (never on its sand or at the water)
+          const fp = v.footprint;
+          const px = Math.floor(fp.bx + (i + 0.5) * fp.s);
+          const py = Math.floor(fp.by + (j + 0.5) * fp.s);
+          if (!v.parent || px < 1 || py < 1 || px >= GRID_SIZE - 1 || py >= GRID_SIZE - 1 || !this.grassAround(v.parent.grid, px, py, 1)) continue;
+          if ((i * 7 + j * 13) % 10 < 7) free.push({ i, j }); // thinned: a village is a clearing with some trees, not a wood
+        }
+      }
+      const homes = [...houses.values()].map((h) => [h.sx / h.n, h.sy / h.n] as const);
+      const trees = placeScenery(free, v.node.id + '#village').filter(
+        (p) => !homes.some(([hx, hy]) => Math.hypot(hx - (p.i + 0.5 + p.dx), hy - (p.j + 0.5 + p.dy)) < 1.25),
+      );
+      this.addScenery(kit, trees, decor);
+      for (const t of trees) if (t.kind !== 'rock' && t.kind !== 'tuft') blockedCells.add(t.j * GRID_SIZE + t.i);
     }
 
     // A village shows one house per file or function (src/render/village.ts): bigger code, bigger building. Every
     // house still owns its patch of tiles, so hover and zoom work per file; the art is scenery drawn over them.
+    const floorArt = [1, 2, 3, 4].some((f) => kit.hasArt('objects.house.' + f));
     const hutArt = kit.hasArt('objects.hut.small') || kit.hasArt('objects.hut.medium') || kit.hasArt('objects.hut.large');
-    if (houses.size > 0 && hutArt) {
+    if (houses.size > 0 && floorArt) {
+      // Every building is the same width; code size only sets how many floors it has.
+      const sizeOf = new Map(v.node.children.map((c) => [c.id, c.size]));
+      const nameOf = new Map(v.node.children.map((c) => [c.id, c.name]));
+      const inputs = [...houses.entries()].map(([id, h]) => ({ id, x: h.sx / h.n, y: h.sy / h.n, n: h.n, size: sizeOf.get(id) ?? 0 }));
+      for (const p of placeHouses(inputs)) {
+        let floors = p.floors;
+        while (floors > 1 && !kit.hasArt('objects.house.' + floors)) floors--; // no art that tall: use a shorter one
+        if (!kit.hasArt('objects.house.' + floors)) floors = [1, 2, 3, 4].find((f) => kit.hasArt('objects.house.' + f))!;
+        const art = kit.house(floors, p.hash);
+        // draw the whole image so that the building inside it comes out exactly p.width cells wide
+        const imageCells = (p.width * art.texture.width) / art.buildingPx;
+        const sp = this.objectSprite(art, p.x, p.y, imageCells / art.widthInTiles, TILE_H * 0.15);
+        if (p.hash % 2 === 1) sp.scale.x = -sp.scale.x;
+        const name = nameOf.get(p.id);
+        if (name) {
+          const text = name.length > 20 ? name.slice(0, 19) + '…' : name;
+          const label = new Text({
+            text,
+            style: { fontSize: 11, fontWeight: '700', fill: 0xffffff, stroke: { color: 0x10233a, width: 3 } },
+            resolution: 2,
+          });
+          label.anchor.set(0.5, 1);
+          // top of the house, in local space then root world units
+          const topY = sp.y - sp.height * art.anchor[1] + sp.height * (art.topPx / art.texture.height);
+          const item: HouseLabel = {
+            label,
+            view: v,
+            x: v.ox + v.f * sp.x,
+            y: v.oy + v.f * topY,
+            size: { w: label.width, h: label.height },
+            rank: p.floors + p.hash / 4294967296,
+          };
+          label.visible = false;
+          this.labels.addChild(label);
+          v.houseLabels.push(item);
+          this.houseLabels.push(item);
+        }
+        // Grounded: a wide soft shadow plus a tight dark one right at the foot of the wall, so the building sits
+        // on the ground instead of looking pasted over it.
+        const sh = new Container();
+        const soft = this.objectSprite(kit.shadow, p.x, p.y, (p.shadowInTiles * 1.5) / kit.shadow.widthInTiles, TILE_H * 0.15);
+        soft.alpha = 0.55;
+        const tight = this.objectSprite(kit.shadow, p.x, p.y, (p.shadowInTiles * 1.05) / kit.shadow.widthInTiles, TILE_H * 0.15 - 1);
+        tight.alpha = 1;
+        sh.addChild(soft, tight);
+        decor.push({ gx: p.x + p.y, gy: 0, sprite: sp, shadow: sh });
+      }
+    } else if (houses.size > 0 && hutArt) {
       const sizeOf = new Map(v.node.children.map((c) => [c.id, c.size]));
       const inputs = [...houses.entries()].map(([id, h]) => ({ id, x: h.sx / h.n, y: h.sy / h.n, n: h.n, size: sizeOf.get(id) ?? 0 }));
       for (const p of placeHouses(inputs)) {
@@ -611,11 +1103,54 @@ export class Renderer {
     }
     decor.sort((a, b) => a.gx - b.gx);
     for (const d of decor) {
-      if (d.shadow) layer.addChild(d.shadow);
-      layer.addChild(d.sprite);
+      const target = ownerLayer(d.owner);
+      if (d.shadow) {
+        d.shadow.zIndex = d.gx + 1 - 0.001;
+        target.addChild(d.shadow);
+      }
+      d.sprite.zIndex = d.gx + 1; // used when the layer sorts (the root island, where people walk among the houses)
+      target.addChild(d.sprite);
     }
 
+    smokeLayer.zIndex = 1e6;
+    layer.addChild(smokeLayer);
+    this.drawnViews.push(v);
+    this.spawnBoats(v);
+    // The repository's own island (the root's loose files) is where the collaborators live: mark where they may walk.
+    if (v.depth === 1 && v.node.id.endsWith(LOOSE_FILES_SUFFIX) && v.allowed) {
+      const allowed = v.allowed;
+      const walkable = Array.from({ length: GRID_SIZE }, (_, j) =>
+        Array.from({ length: GRID_SIZE }, (_, i) => {
+          const t = grid[j][i];
+          return allowed[j][i] && t.type !== 'house' && !(t.type === 'village' && t.variant === 2) && !blockedCells.has(j * GRID_SIZE + i);
+        }),
+      );
+      v.layer.sortableChildren = true; // people and buildings sort by depth together
+      this.homeSpot = { view: v, walkable, cells: walkableCells(walkable) };
+      this.spawnPeople();
+    }
     kit.flush();
+  }
+
+  /** Turn scenery placements (trees, bushes, rocks, tufts) into sprites with shadows, queued for depth sorting. */
+  private addScenery(
+    kit: TileKit,
+    placements: ReturnType<typeof placeScenery>,
+    decor: { gx: number; gy: number; sprite: Sprite; shadow?: Container; owner?: string }[],
+    owner?: string,
+  ): void {
+    for (const p of placements) {
+      const art = p.kind === 'rock' ? kit.rock(p.hash) : p.kind === 'tuft' ? kit.tuft(p.hash) : kit.tree(p.kind, p.hash);
+      const gx = p.i + 0.5 + p.dx;
+      const gy = p.j + 0.5 + p.dy;
+      const sp = this.objectSprite(art, gx, gy, 1, TILE_H * 0.3);
+      if (p.hash % 2 === 1) sp.scale.x = -sp.scale.x; // mirror half of them: same tree, different look
+      const shade = 232 + ((p.hash >> 5) % 24); // slight brightness variation
+      sp.tint = (shade << 16) | (shade << 8) | shade;
+      const sh = this.objectSprite(kit.shadow, gx, gy, art.shadowInTiles / kit.shadow.widthInTiles, TILE_H * 0.3);
+      sh.alpha = 0.8;
+      decor.push({ gx: p.i + p.j + p.dx + p.dy, gy: 0, sprite: sp, shadow: sh, owner });
+    }
   }
 
   /** True if every tile within `r` cells (a square around x, y) is plain inland grass of the same island. */
@@ -673,6 +1208,9 @@ export class Renderer {
 
   /** Detail opacity for a view of cumulative scale f: 0 when tiny, 1 once reasonably large. */
   private alphaFor(depth: number, f: number): number {
+    // Top-level clusters are always fully drawn, at every zoom: if they faded in with the zoom, the parent's solid
+    // islet (a flat green blob with oversized trees) would show through whenever you scrolled.
+    if (depth <= 1) return 1;
     const r = (this.world.scale.x * f) / this.fit;
     const sizeT = clamp01((r - DETAIL_START) / (DETAIL_FULL - DETAIL_START));
     return Math.min(this.depthT(depth), sizeT);
@@ -696,6 +1234,20 @@ export class Renderer {
     v.label.scale.set(1 / this.world.scale.x);
   }
 
+  /** House names appear once the village fills a good part of the screen, and follow its fade. */
+  private updateHouseLabels(v: View): void {
+    if (v.houseLabels.length === 0) return;
+    const sc = this.world.scale.x;
+    const r = (sc * v.f) / this.fit;
+    const a = clamp01((r - 0.9) / 0.5) * v.alpha;
+    for (const h of v.houseLabels) {
+      h.label.alpha = a;
+      h.label.visible = v.container.visible && a > 0.02;
+      h.label.scale.set(1 / sc);
+      h.label.position.set(h.x, h.y - 4 / sc);
+    }
+  }
+
   /** A gentle flicker: the flames breathe a little and the glow pulses (only for campfires whose view is showing). */
   private animateFires(): void {
     if (this.fires.length === 0) return;
@@ -705,6 +1257,15 @@ export class Renderer {
       const a = Math.sin(t * 7 + f.phase) * 0.5 + Math.sin(t * 13.3 + f.phase * 2) * 0.5;
       f.sprite.scale.y = f.base * (1 + 0.035 * a);
       f.glow.alpha = (0.26 + 0.1 * a) * f.view.alpha;
+      // smoke puffs: each is on its own point of a looping life (0 = just left the flames, 1 = gone), staggered
+      for (let k = 0; k < f.smoke.length; k++) {
+        const life = (t * SMOKE_SPEED + k / f.smoke.length + f.phase / 6.28) % 1;
+        const puff = f.smoke[k];
+        const sway = Math.sin(life * 5 + k * 1.7 + f.phase) * 0.06 + life * 0.14; // a little wobble and a drift downwind
+        puff.position.set(f.x + sway * f.w, f.y - life * f.h * 1.2);
+        puff.width = puff.height = f.w * (0.12 + life * 0.3);
+        puff.alpha = Math.min(1, life * 8) * (1 - life * life) * 0.85 * f.view.alpha;
+      }
     }
   }
 
@@ -712,13 +1273,20 @@ export class Renderer {
   private hideOverlappingLabels(): void {
     const sc = this.world.scale.x;
     const shown: { x0: number; y0: number; x1: number; y1: number }[] = [];
-    const byImportance = this.labelViews.filter((v) => v.label?.visible && v.labelSize).sort((a, b) => b.f - a.f || a.depth - b.depth);
-    for (const v of byImportance) {
-      const l = v.label!;
-      const { w, h } = v.labelSize!;
+    const items: { text: Text; w: number; h: number; rank: number }[] = [];
+    for (const v of this.labelViews) {
+      if (v.label?.visible && v.labelSize) items.push({ text: v.label, w: v.labelSize.w, h: v.labelSize.h, rank: 1000 + v.f - v.depth * 1e-3 });
+    }
+    for (const h of this.houseLabels) {
+      if (h.label.visible) items.push({ text: h.label, w: h.size.w, h: h.size.h, rank: h.rank });
+    }
+    items.sort((a, b) => b.rank - a.rank);
+    for (const it of items) {
+      const l = it.text;
       const cx = this.world.position.x + sc * l.position.x;
-      const cy = this.world.position.y + sc * l.position.y;
-      const box = { x0: cx - w / 2 - 4, y0: cy - h / 2 - 2, x1: cx + w / 2 + 4, y1: cy + h / 2 + 2 };
+      // the label's centre on screen (house names hang their bottom edge on the point, island names are centred)
+      const cy = this.world.position.y + sc * l.position.y - (l.anchor.y - 0.5) * it.h;
+      const box = { x0: cx - it.w / 2 - 4, y0: cy - it.h / 2 - 2, x1: cx + it.w / 2 + 4, y1: cy + it.h / 2 + 2 };
       if (shown.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0)) l.visible = false;
       else shown.push(box);
     }
@@ -729,7 +1297,13 @@ export class Renderer {
     if (!v.drawn) this.drawView(v);
     v.gfx.alpha = v.alpha;
     v.layer.alpha = v.alpha;
+    if (v.boatLayer) {
+      v.boatLayer.alpha = v.alpha;
+      // child views are added to this container as they appear: keep the boats above them
+      if (v.container.children[v.container.children.length - 1] !== v.boatLayer) v.container.addChild(v.boatLayer);
+    }
     this.updateLabel(v);
+    this.updateHouseLabels(v);
     for (const isl of this.islandsOf(v)) {
       const fk = v.f * isl.footprint.s;
       const o = gridToScreen(isl.footprint.bx, isl.footprint.by);
@@ -737,6 +1311,10 @@ export class Renderer {
       const koy = v.oy + v.f * o.y;
       const alpha = this.alphaFor(v.depth + 1, fk);
       const visible = alpha > 0 && this.onScreen(fk, kox, koy);
+      const vt = v.villageTrees.get(isl.child.id);
+      if (vt) vt.alpha = visible ? 1 - alpha : 1;
+      const oc = v.ownerLayers.get(isl.child.id);
+      if (oc) oc.alpha = visible ? 1 - alpha : 1;
       let kid = v.kids.get(isl.child.id);
       if (!visible) {
         if (kid) this.hideView(kid);
@@ -778,6 +1356,7 @@ export class Renderer {
   private hideView(v: View): void {
     v.container.visible = false;
     if (v.label) v.label.visible = false;
+    for (const h of v.houseLabels) h.label.visible = false;
     for (const k of v.kids.values()) this.hideView(k);
   }
 

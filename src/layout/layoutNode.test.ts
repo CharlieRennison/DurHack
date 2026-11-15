@@ -204,3 +204,16 @@ describe('home islet', () => {
     }
   });
 });
+
+describe('no functions layer', () => {
+  const fn = (id: string): RepoNode => ({ id, kind: 'function', name: id, path: id, size: 3, children: [] });
+  const withFns: RepoNode = { id: 'a.py', kind: 'file', name: 'a.py', path: 'a.py', size: 30, children: [fn('a.py#f'), fn('a.py#g')] };
+  it('a file shows nothing under it, even if it has function nodes', () => {
+    expect(effectiveChildren(withFns)).toEqual([]);
+  });
+  it('a folder of files with functions is a plain village of one house per file', () => {
+    const folder = mk('d', 50, [withFns, { ...withFns, id: 'b.py', path: 'b.py', children: [fn('b.py#h')] }]);
+    const g = layoutNode(folder, 0, Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(true)));
+    expect(new Set(g.flat().filter((t) => t.type === 'house').map((t) => t.nodeId))).toEqual(new Set(['a.py', 'b.py']));
+  });
+});

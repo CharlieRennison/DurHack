@@ -21,6 +21,10 @@ export const WATER = [0x18a7b4, 0x18a7b4, 0x62d6c8] as const;
 export const PLACEHOLDER = {
   grass: '#5fae52',
   sand: '#e3d49a',
+  dirt: '#a98259',
+  dirtDark: '#8a6a45',
+  stone: '#a59d90',
+  fire: ['#ac2c05', '#ffa000', '#ffd800'],
   foam: 'rgba(255,255,255,0.85)',
   sandBlend: 'rgba(227,212,154,0.85)',
   waterLine: 'rgba(255,255,255,0.10)',

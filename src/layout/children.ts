@@ -35,6 +35,11 @@ const effective = new WeakMap<RepoNode, RepoNode[]>();
 export function effectiveChildren(node: RepoNode): RepoNode[] {
   let out = effective.get(node);
   if (out) return out;
+  // A file is a house and the deepest level there is: whatever hangs under it (functions) is never shown.
+  if (node.kind === 'file' || node.kind === 'function') {
+    effective.set(node, []);
+    return [];
+  }
   const folders = node.children.filter((c) => c.kind === 'folder');
   const loose = node.children.filter((c) => c.kind !== 'folder');
   if (node.kind === 'folder' && folders.length > 0 && loose.length > 0) {

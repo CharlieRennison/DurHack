@@ -31,6 +31,7 @@ export interface Tile {
   // Territories: an 'ocean' tile that has a nodeId is that child's territory water (the shallow ring round its
   // islet, or the reef water of a coral). It is zoomable into that node like any other tile with a nodeId.
   // On ocean tiles `variant` means depth: 0 = deep, 1 = shallow (inside a cluster), 2 = reef.
+  // Villages: a 'village' tile with no nodeId is open village ground. `variant` 0 = dirt path, 1 = plaza, 2 = campfire.
 }
 
 /** layout -> render. Indexed grid[y][x]. */

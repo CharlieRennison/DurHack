@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Repo Islands</title>
+    <title>Isle of Git</title>
   </head>
   <body>
     <div id="canvas-host"></div>
@@ -11,7 +11,7 @@
       <div id="topbar">
         <select id="repo-select" aria-label="Repository"></select>
         <form id="gh-form" autocomplete="off">
-          <input id="gh-input" type="text" spellcheck="false" placeholder="github.com/owner/repo" aria-label="GitHub link" />
+          <input id="gh-input" type="text" autocomplete="off" autocapitalize="off" data-lpignore="true" data-1p-ignore data-form-type="other" spellcheck="false" placeholder="github.com/owner/repo" aria-label="GitHub link" />
           <button id="gh-load" type="submit">Load</button>
         </form>
         <nav id="breadcrumb"></nav>
@@ -20,7 +20,7 @@
         <button id="settings-btn" type="button" aria-label="Settings" aria-expanded="false" title="Settings">&#9881;</button>
         <div id="settings-panel" hidden>
           <label for="gh-token">GitHub token <span class="dim">(optional)</span></label>
-          <input id="gh-token" type="password" autocomplete="off" spellcheck="false" placeholder="Only needed for private repos or rate limits" />
+          <input id="gh-token" type="text" class="secret" autocomplete="off" autocapitalize="off" data-lpignore="true" data-1p-ignore data-form-type="other" spellcheck="false" placeholder="Only needed for private repos or rate limits" />
           <div class="row">
             <button id="gh-token-save" type="button">Save</button>
             <button id="gh-token-clear" type="button">Clear</button>
@@ -30,8 +30,8 @@
         </div>
       </div>
       <div id="live-status" hidden></div>
+      <div id="legend"></div>
       <div id="inspect"></div>
-      <div id="pizza"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

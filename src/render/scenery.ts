@@ -5,7 +5,9 @@
  * Per islet: a density between DENSITY_MIN and DENSITY_MAX of its eligible cells (varied by the islet's id, so some
  * islets are wooded and some open, but none bare or solid), clamped to at least MIN_TREES and at most MAX_SHARE of
  * the cells. Candidates are ranked by a grove noise field (so trees clump into groves with clearings) and accepted
- * best-first only if they keep MIN_SPACING from every tree already placed.
+ * best-first only if they keep MIN_SPACING from every tree already placed. Finally the empty space is populated: any
+ * spot that is still more than FILL_GAP from every tree gets one (the emptiest spots first), so no islet is left with
+ * a big bare stretch, while the spacing and MAX_SHARE keep it from getting crowded.
  */
 
 export type SceneryKind = 'conifer' | 'leafy' | 'bush' | 'dead' | 'rock' | 'tuft';
@@ -22,8 +24,10 @@ export interface Placement {
   hash: number;
 }
 
-export const DENSITY_MIN = 0.15;
-export const DENSITY_MAX = 0.35;
+export const DENSITY_MIN = 0.2;
+export const DENSITY_MAX = 0.4;
+/** No clearing is wider than this (cells): any spot farther than this from every tree gets one, up to MAX_SHARE. */
+export const FILL_GAP = 2.5;
 export const MIN_TREES = 2;
 export const MAX_SHARE = 0.45;
 /** Closest two trees may stand, in cells. */
@@ -111,6 +115,34 @@ export function placeScenery(cells: { i: number; j: number }[], seed: string): P
     }
     out.push({ i: c.i, j: c.j, dx, dy, kind, hash });
     pos.push([x, y]);
+  }
+
+  // Populate the empty space: repeatedly plant the spot farthest from every tree while it is farther than FILL_GAP.
+  const maxTrees = Math.floor(n * MAX_SHARE);
+  if (out.length < maxTrees) {
+    const spots = cells.map((c) => ({ c, x: c.i + 0.5, y: c.j + 0.5 }));
+    const nearest = spots.map((p) => pos.reduce((m, [px, py]) => Math.min(m, Math.hypot(px - p.x, py - p.y)), Infinity));
+    while (out.length < maxTrees) {
+      let best = -1;
+      let bestD = FILL_GAP;
+      for (let k = 0; k < spots.length; k++) {
+        if (nearest[k] > bestD) {
+          bestD = nearest[k];
+          best = k;
+        }
+      }
+      if (best < 0) break;
+      const c = spots[best].c;
+      const { hash } = spot(c);
+      const g = grove(c.i, c.j);
+      const conifer = patch(c.i, c.j) > 0.5;
+      const kind: SceneryKind = g < 0.34 ? 'bush' : (lattice(c.i, c.j, s + 6) < 0.85 ? conifer : !conifer) ? 'conifer' : 'leafy';
+      const dx = 0;
+      const dy = 0;
+      out.push({ i: c.i, j: c.j, dx, dy, kind, hash });
+      pos.push([c.i + 0.5, c.j + 0.5]);
+      for (let k = 0; k < spots.length; k++) nearest[k] = Math.min(nearest[k], Math.hypot(spots[k].x - (c.i + 0.5), spots[k].y - (c.j + 0.5)));
+    }
   }
 
   // Rocks and tufts in the clearings, kept off the trees.

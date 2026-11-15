@@ -1,16 +1,22 @@
-import { Application, Container, Graphics, Matrix, Sprite, Text, TilingSprite, type Texture } from 'pixi.js';
+import { Application, Container, Graphics, Matrix, Sprite, Text, TilingSprite, Texture } from 'pixi.js';
 import { GRID_SIZE, type Grid, type RepoNode, type Tile } from '../types';
 import { effectiveChildren, forgetNode, isVillage, LOOSE_FILES_SUFFIX } from '../layout/children';
 import { gridToScreen, screenToCell, TILE_H, TILE_W } from './iso';
 import { HIGHLIGHT, PALETTE, WATER } from './palette';
+import { Gulls } from './gulls';
+import { makeWalkers, stepWalker, walkableCells, walkerFrame, type Walker } from './people';
+import { languageOf, recolourPixels } from './language';
+import { kindOf, makeAnimals, makeDino, type Animal } from './animals';
 import { placeScenery } from './scenery';
-import { placeHouses } from './village';
+import { HOUSE_WIDTH, placeHouses } from './village';
 import { Edge, loadTileKit, type Sprite3D, type TileKit } from './tiles';
 
 export interface HoverInfo {
   x: number;
   y: number;
   tile: Tile;
+  /** The folder or file whose view the tile is in. */
+  container: RepoNode;
 }
 
 export type Layout = (node: RepoNode, depth: number, allowed?: boolean[][]) => Grid;
@@ -49,14 +55,42 @@ interface View {
   layer: Container;
   drawn: boolean;
   alpha: number;
-  /** Name label anchored at the island's centroid; kept at constant screen size. */
-  label: Text | null;
-  /** Label size in screen pixels (it is kept at constant screen size). */
-  labelSize: { w: number; h: number } | null;
+  /** Names of the islands inside this view, anchored at each island's middle and kept at constant screen size. */
+  childLabels: IslandLabel[];
   islands: Island[] | null;
   /** Files shown here that have no children yet (live mode may still load their functions). */
   pending: Island[];
   kids: Map<string, View>;
+  /** Trees the parent level draws on a village islet's grass; they fade out as that village's own view fades in. */
+  villageTrees: Map<string, Container>;
+  /** Names above this village view's houses. */
+  houseLabels: HouseLabel[];
+  /**
+   * Ground and scenery of each child islet that has a view of its own, kept apart so the islet can fade out exactly as
+   * its view fades in (no flat blob with oversized trees left showing through).
+   */
+  ownerLayers: Map<string, Container>;
+}
+
+/** A file's name floating above its house. Lives in the shared labels layer, at constant screen size. */
+interface HouseLabel {
+  label: Text;
+  view: View;
+  /** Anchor point (the top of the house) in root world units. */
+  x: number;
+  y: number;
+  size: { w: number; h: number };
+  /** Taller (more code) wins when labels overlap. */
+  rank: number;
+}
+
+/** An island's name, drawn by the view that contains the island (so it exists as soon as the island is on screen). */
+interface IslandLabel {
+  label: Text;
+  size: { w: number; h: number };
+  /** The island's cumulative scale (its footprint size in root world units / one root grid) and depth. */
+  f: number;
+  depth: number;
 }
 
 interface Cell {
@@ -67,6 +101,9 @@ interface Cell {
   variant: number;
 }
 
+/** Campfire smoke: puffs per fire and how fast each one lives its life (1 = once per second). */
+const SMOKE_PUFFS = 7;
+const SMOKE_SPEED = 0.2;
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 5000;
 /** Detail fades in between these sizes (view size relative to the fit scale). */
@@ -125,13 +162,35 @@ export class Renderer {
   private homeCentre = { x: 0, y: 0 };
   private pointer: { x: number; y: number } | null = null;
   private hover: { view: View; x: number; y: number } | null = null;
-  private labelViews: View[] = [];
+  private islandLabels: IslandLabel[] = [];
+  /** The camera flight in progress (a new one replaces it), and the ring that marks a searched-for file for a while. */
+  private flyStep: (() => void) | null = null;
+  private marker: { view: View; x: number; y: number; name: string; born: number } | null = null;
+  private markerGfx: Graphics | null = null;
+  private markerLabel: Text | null = null;
+  /** Collaborators' names, and the little people who walk the root island for them. */
+  private collaborators: string[] = [];
+  private homeSpot: { view: View; walkable: boolean[][]; cells: [number, number][] } | null = null;
+  private people: { walker: Walker; sprite: Sprite; frames: Texture[] }[] = [];
+  private personLabel: Text | null = null;
+  private hoveredPerson = -1;
+  private peopleClock = 0;
+  /** Animals wandering the islands (one or two per island), in the layer of the view they live in. */
+  private animals: { a: Animal; view: View; sprite: Sprite; frames: Texture[] }[] = [];
+  private animalClock = 0;
+  /** Seagulls flying across the foreground (null until the tile art is loaded). */
+  private gulls: Gulls | null = null;
+  private houseLabels: HouseLabel[] = [];
+  /** Campfires on screen-able village views, flickered every frame while their view is visible. */
+  private fires: { sprite: Sprite; glow: Sprite; view: View; phase: number; base: number; smoke: Sprite[]; x: number; y: number; h: number; w: number }[] = [];
   private chain: View[] = [];
   private chainKey = '';
   /** Tile kit (manifest art with code-drawn placeholders); null only if it failed to build, then flat colours are drawn. */
   private kit: TileKit | null = null;
 
   onHover: (info: HoverInfo | null) => void = () => {};
+  /** Called when the pointer is clicked (pressed and released without dragging) on a tile. */
+  onTileClick: (info: HoverInfo) => void = () => {};
   /** Called with the node stack (root first) whenever the current level changes. */
   onLevelChange: (nodes: RepoNode[]) => void = () => {};
   /**
@@ -147,8 +206,15 @@ export class Renderer {
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.world);
     this.bindInput(this.app.canvas);
+    this.app.ticker.add(() => this.animateFires());
+    this.app.ticker.add(() => this.gulls?.update(this.app.ticker.deltaMS / 1000));
+    this.app.ticker.add(() => this.animatePeople(Math.min(this.app.ticker.deltaMS / 1000, 0.1)));
+    this.app.ticker.add(() => this.animateAnimals(Math.min(this.app.ticker.deltaMS / 1000, 0.1)));
+    this.app.ticker.add(() => this.animateMarker());
     try {
       this.kit = await loadTileKit();
+      this.gulls = new Gulls(this.kit.frames('objects.seagull').map((f) => f.texture), () => ({ w: this.app.screen.width, h: this.app.screen.height, x: this.world.position.x, y: this.world.position.y, scale: this.world.scale.x, ref: this.fit * 3 }));
+      this.app.stage.addChild(this.gulls.layer); // follows the world's camera, above it; ignores the mouse
     } catch (e) {
       console.warn('Tile art unavailable, using flat colours:', e);
     }
@@ -161,11 +227,235 @@ export class Renderer {
     this.chainKey = ''; // a new root must refresh the breadcrumb even if its id ("root") is unchanged
     this.world.removeChildren().forEach((c) => c.destroy({ children: true }));
     this.labels = new Container();
-    this.labelViews = [];
+    this.islandLabels = [];
+    this.houseLabels = [];
+    this.marker = null;
+    this.flyStep = null;
+    this.people = [];
+    this.collaborators = []; // the new repo's names arrive with setCollaborators
+    this.homeSpot = null;
+    this.animals = [];
+    this.personLabel = null;
+    this.hoveredPerson = -1;
+    this.fires = [];
     this.root = this.makeView(root, 0, undefined, undefined);
     this.world.addChild(this.root.container, this.labels);
     this.fitCamera();
     this.refresh();
+  }
+
+  /**
+   * Fly to a search result. `chain` is the island ids to go through from the root (as in focusPath); the camera lands on
+   * the last island that exists. With `target` (a file id) it zooms on that file's house in the village and rings it for
+   * a few seconds, with its name floating above.
+   */
+  focusNode(chain: string[], target?: string, name = ''): void {
+    let v = this.root;
+    if (!v) return;
+    for (const id of chain) {
+      const isl = this.islandsOf(v).find((i) => i.child.id === id);
+      if (!isl) break;
+      let kid = v.kids.get(id);
+      if (!kid) {
+        kid = this.makeView(isl.child, v.depth + 1, v, isl.footprint);
+        v.kids.set(id, kid);
+      }
+      v = kid;
+    }
+    const spot = target ? this.houseCentre(v, target) : null;
+    if (!target || !spot) {
+      this.marker = null;
+      this.flyToView(v);
+      return;
+    }
+    const p = gridToScreen(spot.x, spot.y);
+    const wx = v.ox + v.f * p.x;
+    const wy = v.oy + v.f * p.y;
+    const scale = Math.min(MAX_SCALE, (this.fit / v.f) * 2.4);
+    this.flyTo(scale, this.app.screen.width / 2 - scale * wx, this.app.screen.height / 2 - scale * (wy - v.f * TILE_H * 0.4));
+    this.marker = { view: v, x: p.x, y: p.y, name, born: performance.now() };
+  }
+
+  /** The middle of a file's house patch in a village view, in cell coordinates (null if it has none). */
+  private houseCentre(v: View, fileId: string): { x: number; y: number } | null {
+    let sx = 0;
+    let sy = 0;
+    let n = 0;
+    v.grid.forEach((row, j) => row.forEach((t, i) => {
+      if (t.type === 'house' && t.nodeId === fileId) {
+        sx += i + 0.5;
+        sy += j + 0.5;
+        n++;
+      }
+    }));
+    return n ? { x: sx / n, y: sy / n } : null;
+  }
+
+  /** Two expanding rings and the file's name on the house the search flew to, fading out after a few seconds. */
+  private animateMarker(): void {
+    const m = this.marker;
+    if (!m) {
+      if (this.markerGfx) this.markerGfx.visible = false;
+      if (this.markerLabel) this.markerLabel.visible = false;
+      return;
+    }
+    const age = (performance.now() - m.born) / 1000;
+    const life = 7;
+    if (age > life) {
+      this.marker = null;
+      return;
+    }
+    if (!this.markerGfx) {
+      this.markerGfx = new Graphics();
+      this.markerLabel = new Text({
+        text: '',
+        style: { fontSize: 15, fontWeight: '700', fill: 0xfff3a0, stroke: { color: 0x10233a, width: 5 } },
+        resolution: 2,
+      });
+      this.markerLabel.anchor.set(0.5, 1);
+      this.labels.addChild(this.markerGfx, this.markerLabel);
+    }
+    const g = this.markerGfx;
+    const l = this.markerLabel!;
+    const v = m.view;
+    const sc = this.world.scale.x;
+    const wx = v.ox + v.f * m.x;
+    const wy = v.oy + v.f * m.y;
+    const fade = age < life - 1.5 ? 1 : (life - age) / 1.5;
+    g.visible = true;
+    g.clear();
+    for (let k = 0; k < 2; k++) {
+      const ph = ((age * 0.8 + k * 0.5) % 1 + 1) % 1; // two rings, half a cycle apart
+      const radius = (14 + ph * 38) / sc; // constant on screen whatever the zoom
+      g.circle(wx, wy, radius).stroke({ width: 2.5 / sc, color: 0xfff3a0, alpha: (1 - ph) * 0.9 * fade });
+    }
+    g.circle(wx, wy, 5 / sc).fill({ color: 0xfff3a0, alpha: 0.9 * fade });
+    if (l.text !== m.name) l.text = m.name;
+    l.visible = true;
+    l.alpha = fade;
+    l.scale.set(1 / sc);
+    l.position.set(wx, wy - 30 / sc);
+  }
+
+  /** The repository's collaborators: a little person walks the root island for each of them. */
+  setCollaborators(names: string[]): void {
+    this.collaborators = names;
+    this.spawnPeople();
+  }
+
+  /** (Re)create the walking people on the root island from the current names. */
+  private spawnPeople(): void {
+    for (const p of this.people) p.sprite.destroy();
+    this.people = [];
+    this.hoveredPerson = -1;
+    const home = this.homeSpot;
+    const kit = this.kit;
+    if (!home || !kit || !kit.hasArt('objects.person.0') || this.collaborators.length === 0) return;
+    const pxCells = HOUSE_WIDTH / 16; // the same pixel scale as the houses
+    for (const walker of makeWalkers(this.collaborators, home.walkable, home.view.node.id)) {
+      const frames = kit.frames('objects.person.' + walker.variant);
+      const sprite = new Sprite(frames[0].texture);
+      sprite.anchor.set(frames[0].anchor[0], frames[0].anchor[1]);
+      sprite.width = TILE_W * frames[0].texture.width * pxCells;
+      sprite.height = sprite.width / frames[0].aspect;
+      home.view.layer.addChild(sprite);
+      this.people.push({ walker, sprite, frames: frames.map((f) => f.texture) });
+    }
+  }
+
+  /** Put one or two animals on each island of a freshly drawn view. */
+  private spawnAnimals(v: View, kit: TileKit, walkable: boolean[][], isRootHome: boolean): void {
+    // The root island has its collaborators and the baby dinosaur; every other island has its wildlife.
+    const wild = !isRootHome && kit.hasArt('objects.animal.0') ? makeAnimals(walkable, v.node.id) : [];
+    const dino = isRootHome && kit.hasArt('objects.dino') ? makeDino(walkable, v.node.id) : null;
+    for (const a of dino ? [...wild, dino] : wild) {
+      const frames = kit.frames(a === dino ? 'objects.dino' : 'objects.animal.' + kindOf(a.walker));
+      const sprite = new Sprite(frames[0].texture);
+      sprite.anchor.set(frames[0].anchor[0], frames[0].anchor[1]);
+      sprite.width = TILE_W * frames[0].texture.width * (a === dino ? 0.055 : 0.045); // small: a fox is about half a person wide; the dino is about a person tall
+      sprite.height = sprite.width / frames[0].aspect;
+      v.layer.sortableChildren = true;
+      v.layer.addChild(sprite);
+      this.animals.push({ a, view: v, sprite, frames: frames.map((f) => f.texture) });
+    }
+  }
+
+  /** Walk the animals of every view that is on screen. */
+  private animateAnimals(dt: number): void {
+    if (this.animals.length === 0) return;
+    this.animalClock += dt;
+    for (const an of this.animals) {
+      const shown = an.view.container.visible && an.view.layer.alpha > 0.01;
+      an.sprite.visible = shown;
+      if (!shown) continue;
+      const w = an.a.walker;
+      stepWalker(w, dt, an.a.mask, an.a.cells);
+      const pos = gridToScreen(w.x, w.y);
+      an.sprite.position.set(pos.x, pos.y);
+      an.sprite.zIndex = w.x + w.y + 1;
+      an.sprite.texture = an.frames[walkerFrame(w, this.animalClock)] ?? an.frames[0];
+      const sx = Math.abs(an.sprite.scale.x);
+      an.sprite.scale.x = w.facingRight ? sx : -sx;
+    }
+  }
+
+  /** Walk the people, and show a name above whoever the pointer is on. */
+  private animatePeople(dt: number): void {
+    const home = this.homeSpot;
+    if (!home || this.people.length === 0) return;
+    this.peopleClock += dt;
+    const shown = home.view.container.visible;
+    const baseScale = this.people[0].sprite.scale.x < 0 ? -this.people[0].sprite.scale.x : this.people[0].sprite.scale.x;
+    this.people.forEach((p, k) => {
+      stepWalker(p.walker, dt, home.walkable, home.cells);
+      const pos = gridToScreen(p.walker.x, p.walker.y);
+      p.sprite.visible = shown;
+      p.sprite.position.set(pos.x, pos.y);
+      p.sprite.zIndex = p.walker.x + p.walker.y + 1 + 0.0005 * (k + 1);
+      p.sprite.texture = p.frames[walkerFrame(p.walker, this.peopleClock)] ?? p.frames[0];
+      p.sprite.scale.x = p.walker.facingRight ? baseScale : -baseScale;
+    });
+    // hover: the person under the pointer (the front-most one if several overlap)
+    let hit = -1;
+    if (shown && this.pointer) {
+      const rect = this.app.canvas.getBoundingClientRect();
+      const px = this.pointer.x - rect.left;
+      const py = this.pointer.y - rect.top;
+      let bestZ = -Infinity;
+      this.people.forEach((p, k) => {
+        const b = p.sprite.getBounds();
+        const pad = 5;
+        if (px >= b.x - pad && px <= b.x + b.width + pad && py >= b.y - pad && py <= b.y + b.height + pad && p.sprite.zIndex > bestZ) {
+          bestZ = p.sprite.zIndex;
+          hit = k;
+        }
+      });
+    }
+    if (hit !== this.hoveredPerson) {
+      this.hoveredPerson = hit;
+      this.app.canvas.style.cursor = hit >= 0 ? 'pointer' : '';
+    }
+    if (hit >= 0) {
+      const p = this.people[hit];
+      if (!this.personLabel) {
+        this.personLabel = new Text({
+          text: '',
+          style: { fontSize: 13, fontWeight: '700', fill: 0xffffff, stroke: { color: 0x10233a, width: 4 } },
+          resolution: 2,
+        });
+        this.personLabel.anchor.set(0.5, 1);
+        this.labels.addChild(this.personLabel);
+      }
+      const l = this.personLabel;
+      if (l.text !== p.walker.name) l.text = p.walker.name;
+      const v = home.view;
+      const sc = this.world.scale.x;
+      l.position.set(v.ox + v.f * p.sprite.x, v.oy + v.f * (p.sprite.y - p.sprite.height) - 4 / sc);
+      l.scale.set(1 / sc);
+      l.visible = true;
+    } else if (this.personLabel) {
+      this.personLabel.visible = false;
+    }
   }
 
   /** Fly the camera to the level at `index` of the current breadcrumb chain. */
@@ -246,7 +536,7 @@ export class Renderer {
     }
     return {
       node, depth, grid: this.gridFor(node, depth, allowed), allowed, parent, footprint,
-      f, ox, oy, container, gfx, layer, drawn: false, alpha: 1, label: null, labelSize: null, islands: null, pending: [], kids: new Map(),
+      f, ox, oy, container, gfx, layer, drawn: false, alpha: 1, childLabels: [], islands: null, pending: [], kids: new Map(), villageTrees: new Map(), houseLabels: [], ownerLayers: new Map(),
     };
   }
 
@@ -299,6 +589,8 @@ export class Renderer {
     for (const child of effectiveChildren(v.node)) {
       const b = bounds.get(child.id);
       if (!b) continue;
+      // A file is a house and nothing more: there is no layer of functions to zoom into.
+      if (child.kind === 'file') continue;
       const w = b.x1 - b.x0 + 1;
       const h = b.y1 - b.y0 + 1;
       const side = Math.max(w, h);
@@ -307,7 +599,6 @@ export class Renderer {
         footprint: { bx: b.x0 + w / 2 - side / 2, by: b.y0 + h / 2 - side / 2, s: side / GRID_SIZE },
       };
       if (child.children.length > 0) v.islands.push(island);
-      else if (child.kind === 'file' && this.loadChildren) v.pending.push(island);
     }
     return v.islands;
   }
@@ -354,27 +645,43 @@ export class Renderer {
 
   private drawView(v: View): void {
     v.drawn = true;
-    const { cells, cx, cy } = this.viewCells(v);
+    const { cells } = this.viewCells(v);
     if (this.kit) this.drawTextured(v, this.kit, cells);
     else this.drawFlat(v, cells);
 
-    // A folder's home islet (its loose files) has no label: the cluster's label already names it.
-    if (v.footprint && cells.length > 0 && !v.node.id.endsWith(LOOSE_FILES_SUFFIX)) {
+    // Name every island inside this view. The labels belong to the container, not to the islands' own views, so an
+    // island is named as soon as it is on screen: its own view only exists once you have zoomed close, and deep islands
+    // would otherwise go unnamed. A folder's home islet (its loose files) has no label: the cluster's label names it.
+    for (const isl of this.islandsOf(v)) {
+      if (isl.child.id.endsWith(LOOSE_FILES_SUFFIX)) continue;
+      let sx = 0;
+      let sy = 0;
+      let n = 0;
+      v.grid.forEach((row, j) => row.forEach((t, i) => {
+        if (t.nodeId === isl.child.id) {
+          sx += i + 0.5;
+          sy += j + 0.5;
+          n++;
+        }
+      }));
+      if (n === 0) continue;
       const label = new Text({
-        text: v.node.name,
+        text: isl.child.name,
         style: { fontSize: 14, fontWeight: '700', fill: 0xffffff, stroke: { color: 0x10233a, width: 4 } },
         resolution: 2,
       });
       label.anchor.set(0.5);
-      // Position in root world units (the view's origin and scale), not in the masked view's own space.
-      const p = gridToScreen(cx, cy);
+      // position in root world units (this view's origin and scale)
+      const p = gridToScreen(sx / n, sy / n);
       label.position.set(v.ox + v.f * p.x, v.oy + v.f * p.y);
+      label.visible = false;
       this.labels.addChild(label);
-      v.label = label;
-      v.labelSize = { w: label.width, h: label.height };
-      this.labelViews.push(v);
+      const il: IslandLabel = { label, size: { w: label.width, h: label.height }, f: v.f * isl.footprint.s, depth: v.depth + 1 };
+      v.childLabels.push(il);
+      this.islandLabels.push(il);
     }
   }
+
 
   /** Placeholder look: flat-coloured diamonds. Used when the tile art could not be loaded. */
   private drawFlat(v: View, cells: Cell[]): void {
@@ -383,6 +690,25 @@ export class Renderer {
   }
 
   /** A standing object placed on the ground at grid position (gx, gy), sized and anchored from its kit entry. */
+  /** Recoloured copies of house art, one per (texture, language): see recolour() in language.ts. Cached. */
+  private recoloured = new Map<Texture, Map<number, Texture>>();
+  private recolouredTexture(tex: Texture, colour: number): Texture {
+    let byColour = this.recoloured.get(tex);
+    if (!byColour) this.recoloured.set(tex, (byColour = new Map()));
+    let out = byColour.get(colour);
+    if (!out) {
+      const src = this.app.renderer.extract.canvas(tex) as HTMLCanvasElement;
+      const ctx = src.getContext('2d')!;
+      const img = ctx.getImageData(0, 0, src.width, src.height);
+      recolourPixels(img.data, colour);
+      ctx.putImageData(img, 0, 0);
+      out = Texture.from(src);
+      out.source.scaleMode = 'nearest';
+      byColour.set(colour, out);
+    }
+    return out;
+  }
+
   private objectSprite(art: Sprite3D, gx: number, gy: number, widthScale = 1, yLift = 0): Sprite {
     const sp = new Sprite(art.texture);
     sp.anchor.set(art.anchor[0], art.anchor[1]);
@@ -415,7 +741,19 @@ export class Renderer {
     }
 
     // --- ground; collect standing objects to draw after (sorted back to front) ---
-    const decor: { gx: number; gy: number; sprite: Sprite; shadow?: Sprite }[] = [];
+    const decor: { gx: number; gy: number; sprite: Sprite; shadow?: Container; owner?: string }[] = [];
+    // child islets (not villages) that have a view of their own: their ground and trees go in a container each
+    const fadeIds = new Set(effectiveChildren(v.node).filter((c) => c.kind === 'folder' && !isVillage(c) && c.children.length > 0).map((c) => c.id));
+    const ownerLayer = (owner?: string): Container => {
+      if (!owner || !fadeIds.has(owner)) return layer;
+      let c = v.ownerLayers.get(owner);
+      if (!c) {
+        c = new Container();
+        layer.addChild(c);
+        v.ownerLayers.set(owner, c);
+      }
+      return c;
+    };
     const houses = new Map<string, { sx: number; sy: number; n: number }>();
     const isWater = (x: number, y: number) =>
       x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE || grid[y][x].type === 'ocean' || grid[y][x].type === 'coral';
@@ -454,10 +792,44 @@ export class Renderer {
     const seedX = (seedH % 997) * 3.17;
     const seedY = ((seedH >>> 10) % 991) * 2.71;
 
+    const smokeLayer = new Container(); // campfire smoke, above everything else in this view
+    const blockedCells = new Set<number>(); // cells people cannot walk through: trees
     const sceneryCells = new Map<string, { i: number; j: number }[]>();
+    // A village islet's trees are kept apart: seen from here they dress the islet, but once the village's own view
+    // fades in (with its houses, paths and its own trees, all depth-sorted together) these fade out.
+    const villageIds = new Set(effectiveChildren(v.node).filter((c) => isVillage(c)).map((c) => c.id));
     for (const { i, j, type } of cells) {
       const hash = ((Math.imul(i + 1, 73856093) ^ Math.imul(j + 1, 19349663) ^ Math.imul(v.depth + 7, 83492791)) >>> 0) % 1000;
-      if (type === 'island' || type === 'coast' || type === 'village' || type === 'port' || type === 'tree') {
+      if (type === 'village') {
+        // Open village ground: dirt paths and plazas; a campfire stands on its own spot.
+        const dirt = this.groundSprite(kit.ground('dirt', hash, [0, 0, 0, 0]), i, j);
+        if (grid[j][i].variant === 1) dirt.tint = 0xf2e6d4;
+        layer.addChild(dirt);
+        if (grid[j][i].variant === 2) {
+          const art = kit.campfire(hash);
+          const sp = this.objectSprite(art, i + 0.5, j + 0.5, 1, TILE_H * 0.1);
+          const glow = this.objectSprite(kit.shadow, i + 0.5, j + 0.5, 4.6 / kit.shadow.widthInTiles, TILE_H * 0.1);
+          glow.tint = 0xff9a2e;
+          glow.blendMode = 'add';
+          glow.alpha = 0.3;
+          decor.push({ gx: i + j + 0.4, gy: 0, sprite: sp, shadow: glow });
+          // Smoke: a few soft puffs that start at the top of the flames and rise (see animateFires). They sit in
+          // their own layer above the houses, and use the same bounds as the campfire sprite.
+          const smoke: Sprite[] = [];
+          for (let k = 0; k < SMOKE_PUFFS; k++) {
+            const puff = new Sprite(kit.smoke.texture);
+            puff.anchor.set(0.5);
+            puff.tint = 0xe6e6e6;
+            puff.alpha = 0;
+            smokeLayer.addChild(puff);
+            smoke.push(puff);
+          }
+          this.fires.push({
+            sprite: sp, glow, view: v, phase: ((hash * 7) % 628) / 100, base: sp.scale.y,
+            smoke, x: sp.x, y: sp.y - sp.height * 0.61, h: sp.height, w: sp.width,
+          });
+        }
+      } else if (type === 'island' || type === 'coast' || type === 'port' || type === 'tree') {
         const kind = type === 'coast' || type === 'port' ? 'sand' : 'grass';
         const edges: Edge[] = [0, 1, 2, 3].map((s) => {
           const n = classOf(i + SIDE_DX[s], j + SIDE_DY[s]);
@@ -487,7 +859,7 @@ export class Renderer {
           const shade = 226 + Math.round(valueNoise(i * 0.09 + seedY, j * 0.09 + seedX) * 29);
           ground.tint = (shade << 16) | (shade << 8) | shade;
         }
-        layer.addChild(ground);
+        ownerLayer(grid[j][i].nodeId).addChild(ground);
         if (type === 'port') {
           const dock = this.objectSprite(kit.port(hash), i + 0.5, j + 0.5);
           decor.push({ gx: i + j + 0.5, gy: 0, sprite: dock });
@@ -513,24 +885,113 @@ export class Renderer {
     }
 
     for (const [owner, list] of sceneryCells) {
-      for (const p of placeScenery(list, owner)) {
-        const art = p.kind === 'rock' ? kit.rock(p.hash) : p.kind === 'tuft' ? kit.tuft(p.hash) : kit.tree(p.kind, p.hash);
-        const gx = p.i + 0.5 + p.dx;
-        const gy = p.j + 0.5 + p.dy;
-        const sp = this.objectSprite(art, gx, gy, 1, TILE_H * 0.3);
-        if (p.hash % 2 === 1) sp.scale.x = -sp.scale.x; // mirror half of them: same tree, different look
-        const shade = 232 + ((p.hash >> 5) % 24); // slight brightness variation
-        sp.tint = (shade << 16) | (shade << 8) | shade;
-        const sh = this.objectSprite(kit.shadow, gx, gy, art.shadowInTiles / kit.shadow.widthInTiles, TILE_H * 0.3);
-        sh.alpha = 0.8;
-        decor.push({ gx: p.i + p.j + p.dx + p.dy, gy: 0, sprite: sp, shadow: sh });
+      if (!villageIds.has(owner)) {
+        this.addScenery(kit, placeScenery(list, owner), decor, owner);
+        continue;
       }
+      const own: { gx: number; gy: number; sprite: Sprite; shadow?: Container }[] = [];
+      this.addScenery(kit, placeScenery(list, owner), own);
+      own.sort((a, b) => a.gx - b.gx);
+      const holder = new Container();
+      for (const d of own) {
+        if (d.shadow) holder.addChild(d.shadow);
+        holder.addChild(d.sprite);
+      }
+      layer.addChild(holder);
+      v.villageTrees.set(owner, holder);
+    }
+
+    // The village's own trees: on the free ground of its islet, away from houses, paths and campfires.
+    if (v.footprint && v.allowed && isVillage(v.node)) {
+      const allowed = v.allowed;
+      const near = (x: number, y: number, r: number, test: (t: Tile) => boolean) => {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            const t = grid[y + dy]?.[x + dx];
+            if (t && test(t)) return true;
+          }
+        }
+        return false;
+      };
+      const free: { i: number; j: number }[] = [];
+      for (let j = 1; j < GRID_SIZE - 1; j++) {
+        for (let i = 1; i < GRID_SIZE - 1; i++) {
+          if (!allowed[j][i] || grid[j][i].type !== 'ocean') continue;
+          // inland (every neighbour is usable ground) and clear of buildings, paths and plazas by a cell
+          if (!allowed[j - 1][i] || !allowed[j + 1][i] || !allowed[j][i - 1] || !allowed[j][i + 1]) continue;
+          if (near(i, j, 0, (t) => t.type === 'house' || t.type === 'village')) continue; // not on a house patch, path or plaza
+          // and standing on real grass of the islet below, with grass all round (never on its sand or at the water)
+          const fp = v.footprint;
+          const px = Math.floor(fp.bx + (i + 0.5) * fp.s);
+          const py = Math.floor(fp.by + (j + 0.5) * fp.s);
+          if (!v.parent || px < 1 || py < 1 || px >= GRID_SIZE - 1 || py >= GRID_SIZE - 1 || !this.grassAround(v.parent.grid, px, py, 1)) continue;
+          if ((i * 7 + j * 13) % 10 < 7) free.push({ i, j }); // thinned: a village is a clearing with some trees, not a wood
+        }
+      }
+      const homes = [...houses.values()].map((h) => [h.sx / h.n, h.sy / h.n] as const);
+      const trees = placeScenery(free, v.node.id + '#village').filter(
+        (p) => !homes.some(([hx, hy]) => Math.hypot(hx - (p.i + 0.5 + p.dx), hy - (p.j + 0.5 + p.dy)) < 1.25),
+      );
+      this.addScenery(kit, trees, decor);
+      for (const t of trees) if (t.kind !== 'rock' && t.kind !== 'tuft') blockedCells.add(t.j * GRID_SIZE + t.i);
     }
 
     // A village shows one house per file or function (src/render/village.ts): bigger code, bigger building. Every
     // house still owns its patch of tiles, so hover and zoom work per file; the art is scenery drawn over them.
+    const floorArt = [1, 2, 3, 4].some((f) => kit.hasArt('objects.house.' + f));
     const hutArt = kit.hasArt('objects.hut.small') || kit.hasArt('objects.hut.medium') || kit.hasArt('objects.hut.large');
-    if (houses.size > 0 && hutArt) {
+    if (houses.size > 0 && floorArt) {
+      // Every building is the same width; code size only sets how many floors it has.
+      const sizeOf = new Map(v.node.children.map((c) => [c.id, c.size]));
+      const nameOf = new Map(v.node.children.map((c) => [c.id, c.name]));
+      const inputs = [...houses.entries()].map(([id, h]) => ({ id, x: h.sx / h.n, y: h.sy / h.n, n: h.n, size: sizeOf.get(id) ?? 0 }));
+      for (const p of placeHouses(inputs)) {
+        let floors = p.floors;
+        while (floors > 1 && !kit.hasArt('objects.house.' + floors)) floors--; // no art that tall: use a shorter one
+        if (!kit.hasArt('objects.house.' + floors)) floors = [1, 2, 3, 4].find((f) => kit.hasArt('objects.house.' + f))!;
+        const art = kit.house(floors, p.hash);
+        // draw the whole image so that the building inside it comes out exactly p.width cells wide
+        const imageCells = (p.width * art.texture.width) / art.buildingPx;
+        const sp = this.objectSprite(art, p.x, p.y, imageCells / art.widthInTiles, TILE_H * 0.15);
+        if (p.hash % 2 === 1) sp.scale.x = -sp.scale.x;
+        const name = nameOf.get(p.id);
+        // language colour: this house is drawn in a recoloured copy of the art (the walls take the language's hue, roofs stay as they are)
+        const lang = name ? languageOf(name) : null;
+        if (lang) sp.texture = this.recolouredTexture(art.texture, lang.color);
+        if (name) {
+          const text = name.length > 20 ? name.slice(0, 19) + '…' : name;
+          const label = new Text({
+            text,
+            style: { fontSize: 11, fontWeight: '700', fill: 0xffffff, stroke: { color: 0x10233a, width: 3 } },
+            resolution: 2,
+          });
+          label.anchor.set(0.5, 1);
+          // top of the house, in local space then root world units
+          const topY = sp.y - sp.height * art.anchor[1] + sp.height * (art.topPx / art.texture.height);
+          const item: HouseLabel = {
+            label,
+            view: v,
+            x: v.ox + v.f * sp.x,
+            y: v.oy + v.f * topY,
+            size: { w: label.width, h: label.height },
+            rank: p.floors + p.hash / 4294967296,
+          };
+          label.visible = false;
+          this.labels.addChild(label);
+          v.houseLabels.push(item);
+          this.houseLabels.push(item);
+        }
+        // Grounded: a wide soft shadow plus a tight dark one right at the foot of the wall, so the building sits
+        // on the ground instead of looking pasted over it.
+        const sh = new Container();
+        const soft = this.objectSprite(kit.shadow, p.x, p.y, (p.shadowInTiles * 1.5) / kit.shadow.widthInTiles, TILE_H * 0.15);
+        soft.alpha = 0.55;
+        const tight = this.objectSprite(kit.shadow, p.x, p.y, (p.shadowInTiles * 1.05) / kit.shadow.widthInTiles, TILE_H * 0.15 - 1);
+        tight.alpha = 1;
+        sh.addChild(soft, tight);
+        decor.push({ gx: p.x + p.y, gy: 0, sprite: sp, shadow: sh });
+      }
+    } else if (houses.size > 0 && hutArt) {
       const sizeOf = new Map(v.node.children.map((c) => [c.id, c.size]));
       const inputs = [...houses.entries()].map(([id, h]) => ({ id, x: h.sx / h.n, y: h.sy / h.n, n: h.n, size: sizeOf.get(id) ?? 0 }));
       for (const p of placeHouses(inputs)) {
@@ -592,11 +1053,65 @@ export class Renderer {
     }
     decor.sort((a, b) => a.gx - b.gx);
     for (const d of decor) {
-      if (d.shadow) layer.addChild(d.shadow);
-      layer.addChild(d.sprite);
+      const target = ownerLayer(d.owner);
+      if (d.shadow) {
+        d.shadow.zIndex = d.gx + 1 - 0.001;
+        target.addChild(d.shadow);
+      }
+      d.sprite.zIndex = d.gx + 1; // used when the layer sorts (the root island, where people walk among the houses)
+      target.addChild(d.sprite);
     }
 
+    smokeLayer.zIndex = 1e6;
+    layer.addChild(smokeLayer);
+    // The repository's own island (the root's loose files) is where the collaborators live: mark where they may walk.
+    if (v.depth === 1 && v.node.id.endsWith(LOOSE_FILES_SUFFIX) && v.allowed) {
+      const allowed = v.allowed;
+      const walkable = Array.from({ length: GRID_SIZE }, (_, j) =>
+        Array.from({ length: GRID_SIZE }, (_, i) => {
+          const t = grid[j][i];
+          return allowed[j][i] && t.type !== 'house' && !(t.type === 'village' && t.variant === 2) && !blockedCells.has(j * GRID_SIZE + i);
+        }),
+      );
+      v.layer.sortableChildren = true; // people and buildings sort by depth together
+      this.homeSpot = { view: v, walkable, cells: walkableCells(walkable) };
+      this.spawnPeople();
+    }
+    // Animals live on every other island: walkable land, clear of houses, fires and trees.
+    // Only villages (where the houses are): a cluster's islands are drawn by their own views, which would cover them.
+    if (isVillage(v.node)) {
+      const allowed = v.allowed;
+      const walk = Array.from({ length: GRID_SIZE }, (_, j) =>
+        Array.from({ length: GRID_SIZE }, (_, i) => {
+          const t = grid[j][i];
+          const land = t.type === 'island' || (t.type === 'village' && t.variant !== 2);
+          return land && (!allowed || allowed[j][i]) && !blockedCells.has(j * GRID_SIZE + i);
+        }),
+      );
+      this.spawnAnimals(v, kit, walk, v.depth === 1 && v.node.id.endsWith(LOOSE_FILES_SUFFIX));
+    }
     kit.flush();
+  }
+
+  /** Turn scenery placements (trees, bushes, rocks, tufts) into sprites with shadows, queued for depth sorting. */
+  private addScenery(
+    kit: TileKit,
+    placements: ReturnType<typeof placeScenery>,
+    decor: { gx: number; gy: number; sprite: Sprite; shadow?: Container; owner?: string }[],
+    owner?: string,
+  ): void {
+    for (const p of placements) {
+      const art = p.kind === 'rock' ? kit.rock(p.hash) : p.kind === 'tuft' ? kit.tuft(p.hash) : kit.tree(p.kind, p.hash);
+      const gx = p.i + 0.5 + p.dx;
+      const gy = p.j + 0.5 + p.dy;
+      const sp = this.objectSprite(art, gx, gy, 1, TILE_H * 0.3);
+      if (p.hash % 2 === 1) sp.scale.x = -sp.scale.x; // mirror half of them: same tree, different look
+      const shade = 232 + ((p.hash >> 5) % 24); // slight brightness variation
+      sp.tint = (shade << 16) | (shade << 8) | shade;
+      const sh = this.objectSprite(kit.shadow, gx, gy, art.shadowInTiles / kit.shadow.widthInTiles, TILE_H * 0.3);
+      sh.alpha = 0.8;
+      decor.push({ gx: p.i + p.j + p.dx + p.dy, gy: 0, sprite: sp, shadow: sh, owner });
+    }
   }
 
   /** True if every tile within `r` cells (a square around x, y) is plain inland grass of the same island. */
@@ -654,6 +1169,9 @@ export class Renderer {
 
   /** Detail opacity for a view of cumulative scale f: 0 when tiny, 1 once reasonably large. */
   private alphaFor(depth: number, f: number): number {
+    // Top-level clusters are always fully drawn, at every zoom: if they faded in with the zoom, the parent's solid
+    // islet (a flat green blob with oversized trees) would show through whenever you scrolled.
+    if (depth <= 1) return 1;
     const r = (this.world.scale.x * f) / this.fit;
     const sizeT = clamp01((r - DETAIL_START) / (DETAIL_FULL - DETAIL_START));
     return Math.min(this.depthT(depth), sizeT);
@@ -668,26 +1186,76 @@ export class Renderer {
 
   /** A label shows with its level and hands over to the next level's labels as you zoom further. */
   private updateLabel(v: View): void {
-    if (!v.label) return;
-    // Legibility only depends on how big the island is on screen and whether the next level has taken
-    // over; it must not inherit the tile fade, or names ghost out when zoomed out.
-    const r = (this.world.scale.x * v.f) / this.fit;
-    v.label.alpha = clamp01((r - 0.1) / 0.1) * (1 - this.depthT(v.depth + 1));
-    v.label.visible = v.container.visible && v.label.alpha > 0.01;
-    v.label.scale.set(1 / this.world.scale.x);
+    // An island's name shows while the island is a sensible size on screen: from when it is a few dozen pixels across
+    // until its footprint fills the screen, when the names of the islands inside it take over. (Judging by size, not
+    // by zoom thresholds, keeps deep islands named: they are small at the zoom where they appear.)
+    const sc = this.world.scale.x;
+    // and the names of the islands inside a cluster wait until the cluster itself nearly fills the screen (its own name
+    // has handed over by then), so zoomed out you read the clusters, not a scatter of small islands
+    const open = v.depth === 0 ? 1 : clamp01((sc * v.f / this.fit - 0.85) / 0.3);
+    const fade = clamp01(v.alpha * 2.5) * open;
+    for (const il of v.childLabels) {
+      const r = (sc * il.f) / this.fit;
+      const a = clamp01((r - 0.05) / 0.05) * (1 - clamp01((r - 1.1) / 0.5)) * fade;
+      il.label.alpha = a;
+      il.label.visible = v.container.visible && a > 0.01;
+      il.label.scale.set(1 / sc);
+    }
+  }
+
+  /** House names appear once the village fills a good part of the screen, and follow its fade. */
+  private updateHouseLabels(v: View): void {
+    if (v.houseLabels.length === 0) return;
+    const sc = this.world.scale.x;
+    const r = (sc * v.f) / this.fit;
+    const a = clamp01((r - 0.9) / 0.5) * v.alpha;
+    for (const h of v.houseLabels) {
+      h.label.alpha = a;
+      h.label.visible = v.container.visible && a > 0.02;
+      h.label.scale.set(1 / sc);
+      h.label.position.set(h.x, h.y - 4 / sc);
+    }
+  }
+
+  /** A gentle flicker: the flames breathe a little and the glow pulses (only for campfires whose view is showing). */
+  private animateFires(): void {
+    if (this.fires.length === 0) return;
+    const t = performance.now() / 1000;
+    for (const f of this.fires) {
+      if (!f.view.container.visible) continue;
+      const a = Math.sin(t * 7 + f.phase) * 0.5 + Math.sin(t * 13.3 + f.phase * 2) * 0.5;
+      f.sprite.scale.y = f.base * (1 + 0.035 * a);
+      f.glow.alpha = (0.26 + 0.1 * a) * f.view.alpha;
+      // smoke puffs: each is on its own point of a looping life (0 = just left the flames, 1 = gone), staggered
+      for (let k = 0; k < f.smoke.length; k++) {
+        const life = (t * SMOKE_SPEED + k / f.smoke.length + f.phase / 6.28) % 1;
+        const puff = f.smoke[k];
+        const sway = Math.sin(life * 5 + k * 1.7 + f.phase) * 0.06 + life * 0.14; // a little wobble and a drift downwind
+        puff.position.set(f.x + sway * f.w, f.y - life * f.h * 1.2);
+        puff.width = puff.height = f.w * (0.12 + life * 0.3);
+        puff.alpha = Math.min(1, life * 8) * (1 - life * life) * 0.85 * f.view.alpha;
+      }
+    }
   }
 
   /** Labels that would overlap a bigger island's label (bigger view first) are hidden at the current zoom. */
   private hideOverlappingLabels(): void {
     const sc = this.world.scale.x;
     const shown: { x0: number; y0: number; x1: number; y1: number }[] = [];
-    const byImportance = this.labelViews.filter((v) => v.label?.visible && v.labelSize).sort((a, b) => b.f - a.f || a.depth - b.depth);
-    for (const v of byImportance) {
-      const l = v.label!;
-      const { w, h } = v.labelSize!;
+    const items: { text: Text; w: number; h: number; rank: number }[] = [];
+    for (const il of this.islandLabels) {
+      if (il.label.visible) items.push({ text: il.label, w: il.size.w, h: il.size.h, rank: 1000 + il.f - il.depth * 1e-3 });
+    }
+    for (const h of this.houseLabels) {
+      if (h.label.visible) items.push({ text: h.label, w: h.size.w, h: h.size.h, rank: h.rank });
+    }
+    items.sort((a, b) => b.rank - a.rank);
+    for (const it of items) {
+      const l = it.text;
       const cx = this.world.position.x + sc * l.position.x;
-      const cy = this.world.position.y + sc * l.position.y;
-      const box = { x0: cx - w / 2 - 4, y0: cy - h / 2 - 2, x1: cx + w / 2 + 4, y1: cy + h / 2 + 2 };
+      // the label's centre on screen (house names hang their bottom edge on the point, island names are centred)
+      const cy = this.world.position.y + sc * l.position.y - (l.anchor.y - 0.5) * it.h;
+      const box = { x0: cx - it.w / 2 - 4, y0: cy - it.h / 2 - 2, x1: cx + it.w / 2 + 4, y1: cy + it.h / 2 + 2 };
       if (shown.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0)) l.visible = false;
       else shown.push(box);
     }
@@ -699,6 +1267,7 @@ export class Renderer {
     v.gfx.alpha = v.alpha;
     v.layer.alpha = v.alpha;
     this.updateLabel(v);
+    this.updateHouseLabels(v);
     for (const isl of this.islandsOf(v)) {
       const fk = v.f * isl.footprint.s;
       const o = gridToScreen(isl.footprint.bx, isl.footprint.by);
@@ -706,6 +1275,10 @@ export class Renderer {
       const koy = v.oy + v.f * o.y;
       const alpha = this.alphaFor(v.depth + 1, fk);
       const visible = alpha > 0 && this.onScreen(fk, kox, koy);
+      const vt = v.villageTrees.get(isl.child.id);
+      if (vt) vt.alpha = visible ? 1 - alpha : 1;
+      const oc = v.ownerLayers.get(isl.child.id);
+      if (oc) oc.alpha = visible ? 1 - alpha : 1;
       let kid = v.kids.get(isl.child.id);
       if (!visible) {
         if (kid) this.hideView(kid);
@@ -746,7 +1319,8 @@ export class Renderer {
   /** Hide a view, its descendants and their labels. */
   private hideView(v: View): void {
     v.container.visible = false;
-    if (v.label) v.label.visible = false;
+    for (const il of v.childLabels) il.label.visible = false;
+    for (const h of v.houseLabels) h.label.visible = false;
     for (const k of v.kids.values()) this.hideView(k);
   }
 
@@ -796,7 +1370,7 @@ export class Renderer {
       hit.view.container.addChild(this.highlight);
       diamond(this.highlight, hit.x, hit.y).stroke({ width: 2 / (this.world.scale.x * hit.view.f), color: HIGHLIGHT });
     }
-    this.onHover(hit ? { x: hit.x, y: hit.y, tile: hit.tile } : null);
+    this.onHover(hit ? { x: hit.x, y: hit.y, tile: hit.tile, container: hit.view.node } : null);
   }
 
   /** Breadcrumb follows whichever nested level fills the middle of the screen. */
@@ -863,19 +1437,25 @@ export class Renderer {
       this.refresh();
       return;
     }
+    if (this.flyStep) this.app.ticker.remove(this.flyStep); // a new flight replaces the one in progress
     const s0 = this.world.scale.x;
     const x0 = this.world.position.x;
     const y0 = this.world.position.y;
     const t0 = performance.now();
-    const dur = 1500;
+    // farther trips take a little longer
+    const dur = 1200 + 500 * Math.min(2, Math.abs(Math.log(scale / s0)) / Math.LN2 / 3);
     const step = () => {
       const t = clamp01((performance.now() - t0) / dur);
       const e = t * t * (3 - 2 * t);
       this.world.scale.set(Math.exp(Math.log(s0) + (Math.log(scale) - Math.log(s0)) * e));
       this.world.position.set(x0 + (px - x0) * e, y0 + (py - y0) * e);
       this.refresh();
-      if (t >= 1) this.app.ticker.remove(step);
+      if (t >= 1) {
+        this.app.ticker.remove(step);
+        if (this.flyStep === step) this.flyStep = null;
+      }
     };
+    this.flyStep = step;
     this.app.ticker.add(step);
   }
 
@@ -892,8 +1472,12 @@ export class Renderer {
     let dragging = false;
     let lastX = 0;
     let lastY = 0;
+    let downX = 0;
+    let downY = 0;
 
     canvas.addEventListener('pointerdown', (e) => {
+      downX = e.clientX;
+      downY = e.clientY;
       dragging = true;
       lastX = e.clientX;
       lastY = e.clientY;
@@ -911,8 +1495,11 @@ export class Renderer {
         this.refreshHover();
       }
     });
-    canvas.addEventListener('pointerup', () => {
+    canvas.addEventListener('pointerup', (e) => {
       dragging = false;
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return; // a drag, not a click
+      const hit = this.pick(e.clientX, e.clientY);
+      if (hit) this.onTileClick({ x: hit.x, y: hit.y, tile: hit.tile, container: hit.view.node });
     });
     canvas.addEventListener('pointerleave', () => {
       this.pointer = null;

@@ -1,8 +1,13 @@
 import { indexNodes, loadDefaultRoot, loadFunctions, loadManifest, loadRepo, loadRepoLive, type LiveMeta } from './data';
 import { layoutNode } from './layout/layoutNode';
+import { loadCollaborators, type RepoRef } from './render/collaborators';
+import { mountSearch } from './ui/search';
 import { Renderer } from './render/Renderer';
-import { renderBreadcrumb, renderInspect, renderLiveStatus, startBreakfastCountdown } from './ui/panels';
+import { renderBreadcrumb, renderInspect, renderLiveStatus } from './ui/panels';
 import type { RepoNode } from './types';
+import { renderLegend } from './ui/legend';
+import { fileUrl, type RepoLink } from './ui/links';
+import { LOOSE_FILES_SUFFIX } from './layout/children';
 
 /** Repos offered in the top-left switcher (others stay reachable with ?repo=<id>). */
 const SWITCHER_REPOS = ['facebook__react', 'pallets__flask'];
@@ -67,14 +72,18 @@ async function main(): Promise<void> {
 
   const breadcrumb = document.getElementById('breadcrumb')!;
   const inspect = document.getElementById('inspect')!;
-  startBreakfastCountdown(document.getElementById('pizza')!);
+  const legend = document.getElementById('legend')!;
+  renderInspect(inspect, null, null);
   const renderer = new Renderer();
   await renderer.init(document.getElementById('canvas-host')!);
 
   renderer.onLevelChange = (nodes) => renderBreadcrumb(breadcrumb, nodes, (i) => renderer.goTo(i));
   renderer.onHover = (info) => {
-    const node = info?.tile.nodeId ? byId.get(info.tile.nodeId) ?? null : null;
-    renderInspect(inspect, info?.tile ?? null, node);
+    const id = info?.tile.nodeId?.replace(LOOSE_FILES_SUFFIX, '');
+    const node = id ? byId.get(id) ?? null : null;
+    renderInspect(inspect, info?.tile ?? null, node, info?.container ?? null, !!info?.tile.nodeId?.endsWith(LOOSE_FILES_SUFFIX));
+    // a house is a link to its file
+    document.querySelector<HTMLCanvasElement>('#canvas-host canvas')!.style.cursor = node?.kind === 'file' ? 'pointer' : '';
   };
 
   // Live repos only fetched the file list; function nodes load lazily when a file comes into view.
@@ -89,10 +98,44 @@ async function main(): Promise<void> {
     return true;
   };
 
-  const show = (next: RepoNode, meta: LiveMeta | null = null) => {
+  // The repository's collaborators walk its root island (their names come from GitHub's contributors list).
+  let peopleToken = 0;
+  const showPeople = (ref: RepoRef | null) => {
+    const mine = ++peopleToken;
+    renderer.setCollaborators([]);
+    if (!ref) return;
+    void loadCollaborators(ref, readToken() || undefined).then((names) => {
+      if (mine === peopleToken) renderer.setCollaborators(names);
+    });
+  };
+
+  // Search: type a folder or file name and the camera flies to it.
+  const search = mountSearch((e) => renderer.focusNode(e.chain, e.target, e.name));
+
+  // Clicking a house opens its file on GitHub (a new tab).
+  let repoLink: RepoLink | null = null;
+  const linkFor = (meta: LiveMeta | null, ref: RepoRef | null): RepoLink | null => {
+    if (meta) return { owner: meta.owner, repo: meta.repo, ref: meta.ref, subPath: meta.subPath };
+    if (!ref) return null;
+    return { owner: ref.owner, repo: ref.repo, ref: manifest.find((r) => r.id === ref.id)?.ref ?? 'HEAD' };
+  };
+  const fileOf = (id: string | undefined): RepoNode | null => {
+    const n = id ? byId.get(id) ?? null : null;
+    return n && n.kind === 'file' ? n : null;
+  };
+  renderer.onTileClick = (info) => {
+    const file = fileOf(info.tile.nodeId);
+    if (file && repoLink) window.open(fileUrl(repoLink, file.path), '_blank', 'noopener');
+  };
+
+  const show = (next: RepoNode, meta: LiveMeta | null = null, ref: RepoRef | null = meta ? { owner: meta.owner, repo: meta.repo } : null) => {
     currentMeta = meta;
+    repoLink = linkFor(meta, ref);
     byId = indexNodes(next);
     renderer.setRoot(next, layoutNode);
+    search.setRoot(next);
+    showPeople(ref);
+    renderLegend(legend, next);
   };
 
   const describe = (meta: LiveMeta): void => {
@@ -202,7 +245,7 @@ async function main(): Promise<void> {
     if (!next) return;
     select.disabled = true;
     try {
-      show(await loadRepo(next));
+      show(await loadRepo(next), null, { owner: next.owner, repo: next.repo, id: next.id });
       renderLiveStatus(liveStatus, '');
       history.replaceState(null, '', `?repo=${next.id}`);
     } finally {
@@ -220,6 +263,10 @@ async function main(): Promise<void> {
 
   // Semantic zoom: scroll to zoom into islands; scroll out to return to the parent.
   renderer.setRoot(root, layoutNode);
+  search.setRoot(root);
+  renderLegend(legend, root);
+  repoLink = linkFor(initialLive?.meta ?? null, initialLive ? null : entry ? { owner: entry.owner, repo: entry.repo, id: entry.id } : null);
+  showPeople(initialLive ? { owner: initialLive.meta.owner, repo: initialLive.meta.repo } : entry ? { owner: entry.owner, repo: entry.repo, id: entry.id } : null);
 }
 
 main();

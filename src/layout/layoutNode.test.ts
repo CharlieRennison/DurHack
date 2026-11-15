@@ -217,3 +217,19 @@ describe('no functions layer', () => {
     expect(new Set(g.flat().filter((t) => t.type === 'house').map((t) => t.nodeId))).toEqual(new Set(['a.py', 'b.py']));
   });
 });
+
+describe('the root island is not dwarfed by big neighbours', () => {
+  const huge = (name: string) => mk(name, 400000, [mk(name + '/x', 200000, [file(name + '/x/f', 9)]), mk(name + '/y', 200000, [file(name + '/y/f', 9)])]);
+  const big = mk('big', 1000, [huge('h1'), huge('h2'), huge('h3'), huge('h4'), huge('h5'), huge('h6'), file('a.txt', 10), file('b.txt', 10)]);
+  it('gives the home islet a good share of the land next to huge folders', () => {
+    const g = layoutNode(big, 0);
+    const land = (id: string) => g.flat().filter((t) => t.nodeId === id && t.type !== 'ocean').length;
+    const home = land('big#files');
+    const biggest = Math.max(...['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map(land));
+    expect(home).toBeGreaterThanOrEqual(0.5 * biggest);
+  });
+  it('does not change an island inside a territory', () => {
+    const allowed = Array.from({ length: GRID_SIZE }, (_, y) => Array.from({ length: GRID_SIZE }, (_, x) => x >= 6 && x < 40 && y >= 6 && y < 40));
+    expect(layoutNode(big, 0, allowed)).toEqual(layoutNode(big, 0, allowed));
+  });
+});

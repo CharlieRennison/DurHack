@@ -28,6 +28,9 @@ const ROOT: Params = { ring: 2, sep: 3, landFraction: 0.8 };
 /** Inside a territory: narrow channels between islets, about half of it land. */
 const SUB: Params = { ring: 1, sep: 1, landFraction: 0.5 };
 
+/** The root's own island counts for at least this fraction of the weight of its biggest neighbour. */
+export const HOME_SHARE = 0.6;
+
 /** Houses in a village sit close together. */
 const VILLAGE_GAP = 1;
 const VILLAGE_LAND_FRACTION = 0.5;
@@ -69,6 +72,15 @@ function layoutCluster(grid: Grid, kids: RepoNode[], allowed: boolean[][] | unde
   const n = kids.length;
   // Area weight: guaranteed room for every village, plus extra for more lines of code (sqrt so one folder cannot swallow the map).
   const weights = kids.map((c) => 4 + 2 * effectiveChildren(c).length + 1.5 * Math.sqrt(Math.max(0, c.size)));
+  // The repository's own island (the root's loose files) holds little code but is the heart of the map: at the root
+  // it gets at least HOME_SHARE of the biggest neighbour's weight, so it is not dwarfed by the big folders around it.
+  if (!allowed) {
+    const home = kids.findIndex((c) => c.id.endsWith(LOOSE_FILES_SUFFIX));
+    if (home >= 0) {
+      const biggest = Math.max(0, ...weights.filter((_, i) => i !== home));
+      weights[home] = Math.max(weights[home], HOME_SHARE * biggest);
+    }
+  }
   const totalW = weights.reduce((a, b) => a + b, 0);
   const landBudget = okCells.length * params.landFraction;
   const noise = createNoise2D(rand);

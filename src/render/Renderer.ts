@@ -6,7 +6,7 @@ import { HIGHLIGHT, PALETTE, WATER } from './palette';
 import { Gulls } from './gulls';
 import { makeWalkers, stepWalker, walkableCells, walkerFrame, type Walker } from './people';
 import { languageOf, recolourPixels } from './language';
-import { kindOf, makeAnimals, makeDino, type Animal } from './animals';
+import { kindOf, makeAnimals, makeBoats, makeDino, type Animal } from './animals';
 import { placeScenery } from './scenery';
 import { HOUSE_WIDTH, placeHouses } from './village';
 import { Edge, loadTileKit, type Sprite3D, type TileKit } from './tiles';
@@ -176,7 +176,7 @@ export class Renderer {
   private hoveredPerson = -1;
   private peopleClock = 0;
   /** Animals wandering the islands (one or two per island), in the layer of the view they live in. */
-  private animals: { a: Animal; view: View; sprite: Sprite; frames: Texture[] }[] = [];
+  private animals: { a: Animal; view: View; sprite: Sprite; frames: Texture[]; boat?: boolean }[] = [];
   private animalClock = 0;
   /** Seagulls flying across the foreground (null until the tile art is loaded). */
   private gulls: Gulls | null = null;
@@ -380,6 +380,22 @@ export class Renderer {
     }
   }
 
+  /** A few cosmetic boats drifting about the open sea of the root view (deep water, clear of every island's shallows). */
+  private spawnBoats(v: View, kit: TileKit): void {
+    if (!kit.hasArt('objects.boat')) return;
+    const frames = kit.frames('objects.boat');
+    const water = v.grid.map((row) => row.map((t) => t.type === 'ocean' && !t.nodeId));
+    for (const a of makeBoats(water, v.node.id, 5)) {
+      const sprite = new Sprite(frames[0].texture);
+      sprite.anchor.set(frames[0].anchor[0], frames[0].anchor[1]);
+      sprite.width = TILE_W * 0.7;
+      sprite.height = sprite.width / frames[0].aspect;
+      v.layer.sortableChildren = true;
+      v.layer.addChild(sprite);
+      this.animals.push({ a, view: v, sprite, frames: frames.map((f) => f.texture), boat: true });
+    }
+  }
+
   /** Walk the animals of every view that is on screen. */
   private animateAnimals(dt: number): void {
     if (this.animals.length === 0) return;
@@ -391,9 +407,10 @@ export class Renderer {
       const w = an.a.walker;
       stepWalker(w, dt, an.a.mask, an.a.cells);
       const pos = gridToScreen(w.x, w.y);
-      an.sprite.position.set(pos.x, pos.y);
+      // boats rock gently on the water and swap between their two frames; animals walk
+      an.sprite.position.set(pos.x, pos.y + (an.boat ? Math.sin(this.animalClock * 2 + w.phase * 5) * 0.8 : 0));
       an.sprite.zIndex = w.x + w.y + 1;
-      an.sprite.texture = an.frames[walkerFrame(w, this.animalClock)] ?? an.frames[0];
+      an.sprite.texture = an.boat ? an.frames[Math.floor(this.animalClock * 2 + w.phase * 2) % an.frames.length] : an.frames[walkerFrame(w, this.animalClock)] ?? an.frames[0];
       const sx = Math.abs(an.sprite.scale.x);
       an.sprite.scale.x = w.facingRight ? sx : -sx;
     }
@@ -1077,6 +1094,7 @@ export class Renderer {
       this.homeSpot = { view: v, walkable, cells: walkableCells(walkable) };
       this.spawnPeople();
     }
+    if (!v.footprint) this.spawnBoats(v, kit); // the root view: boats on the open sea
     // Animals live on every other island: walkable land, clear of houses, fires and trees.
     // Only villages (where the houses are): a cluster's islands are drawn by their own views, which would cover them.
     if (isVillage(v.node)) {

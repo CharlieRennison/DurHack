@@ -18,8 +18,8 @@ export const FPS_LEEWAY = 1;
 export const MIN_PACK = 1;
 export const MAX_PACK = 10;
 /** Pause between packs, in seconds. */
-export const MIN_GAP = 4;
-export const MAX_GAP = 14;
+export const MIN_GAP = 5;
+export const MAX_GAP = 17;
 /** Most flocks in the sky at once for one zoom band (see zoomBand). */
 export const MAX_FLOCKS = 2;
 /** The first pack after you reach a new zoom band comes quickly (seconds), so zooming in always shows birds soon. */

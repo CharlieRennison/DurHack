@@ -867,5 +867,23 @@
       ],
       "widthInTiles": 1.0
     }
+  ],
+  "objects.boat": [
+    {
+      "file": "objects/boat_0.png",
+      "anchor": [
+        0.5,
+        0.8571428571428571
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/boat_1.png",
+      "anchor": [
+        0.5,
+        0.8571428571428571
+      ],
+      "widthInTiles": 1.0
+    }
   ]
 }

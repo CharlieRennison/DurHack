@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeAnimals, makeDino, patches, MAX_PER_VIEW } from './animals';
+import { makeAnimals, makeBoats, makeDino, patches, MAX_PER_VIEW } from './animals';
 
 const grid = (rows: string[]) => rows.map((r) => [...r].map((c) => c === '#'));
 
@@ -34,6 +34,13 @@ describe('makeAnimals', () => {
     expect(d.cells.length).toBe(81);
     expect(d.mask[Math.floor(d.walker.y)][Math.floor(d.walker.x)]).toBe(true);
     expect(makeDino(Array.from({ length: 5 }, () => Array<boolean>(5).fill(false)), 'a')).toBeNull();
+  });
+  it('boats stay on the sea and there are as many as asked for', () => {
+    const sea = Array.from({ length: 20 }, () => Array<boolean>(20).fill(true));
+    const boats = makeBoats(sea, 'a', 4);
+    expect(boats.length).toBe(4);
+    for (const b of boats) expect(b.mask[Math.floor(b.walker.y)][Math.floor(b.walker.x)]).toBe(true);
+    expect(makeBoats(small, 'a', 3)).toEqual([]); // too small a sea
   });
   it('caps the animals per view', () => {
     const many = Array.from({ length: 40 }, (_, y) => Array.from({ length: 40 }, (_, x) => x % 5 < 4 && y % 5 < 4)); // 64 4x4 patches

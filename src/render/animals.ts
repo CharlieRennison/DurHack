@@ -69,6 +69,22 @@ export function makeAnimals(walkable: boolean[][], seed: string, prefix = 'anima
   return out;
 }
 
+/**
+ * Cosmetic boats drifting about the open sea: `count` walkers that share one mask of water cells (so they sail the
+ * channels between the islands). Seeded; slower than the animals.
+ */
+export function makeBoats(water: boolean[][], seed: string, count: number): Animal[] {
+  const biggest = patches(water)[0];
+  if (!biggest || biggest.length < 30) return [];
+  const mask = Array.from({ length: water.length }, () => Array<boolean>(water[0]?.length ?? 0).fill(false));
+  for (const [x, y] of biggest) mask[y][x] = true;
+  const cells = walkableCells(mask);
+  return makeWalkers(Array.from({ length: count }, (_, k) => `boat ${k}`), mask, seed + '#boats').map((walker) => {
+    walker.speed *= 0.7;
+    return { walker, mask, cells };
+  });
+}
+
 /** The folder's baby dinosaur: one walker on the biggest island of the view (null if there is no room). */
 export function makeDino(walkable: boolean[][], seed: string): Animal | null {
   const biggest = patches(walkable)[0];

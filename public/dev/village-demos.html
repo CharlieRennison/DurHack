@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Village style demos</title>
+<style>
+  body { margin: 0; background: #1b2b3a; color: #fff; font-family: system-ui, sans-serif; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.note { margin: 0 0 16px; opacity: .7; font-size: 13px; }
+  .style { margin-bottom: 22px; }
+  .style h2 { font-size: 15px; margin: 0 0 2px; }
+  .style p { margin: 0 0 8px; font-size: 12px; opacity: .75; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; }
+  canvas { background: #9cc56f; border-radius: 8px; display: block; }
+</style>
+</head>
+<body>
+<h1>Abstract village styles</h1>
+<p class="note">Each style is shown as 4 different villages (different layouts and orientations from different seeds).</p>
+<div id="root"></div>
+<script>
+const S = 15; // pixels per unit along an iso axis
+const W = 230, H = 190;
+
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const P = (x, y, z) => [W / 2 + (x - y) * S, H * 0.62 + (x + y) * S / 2 - z * S];
+function poly(g, pts, fill, stroke) {
+  g.beginPath(); pts.forEach(([x, y, z], i) => { const [sx, sy] = P(x, y, z); i ? g.lineTo(sx, sy) : g.moveTo(sx, sy); });
+  g.closePath(); g.fillStyle = fill; g.fill(); if (stroke) { g.strokeStyle = stroke; g.lineWidth = 1; g.stroke(); }
+}
+function shade(hex, f) { const n = parseInt(hex.slice(1), 16); const c = [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.max(0, Math.min(255, Math.round(v * f)))); return `rgb(${c})`; }
+
+// ---- building primitives (all in ground units; z is up) ----
+function box(g, x, y, w, d, h, wall, roof) {
+  poly(g, [[x + w, y, 0], [x + w, y + d, 0], [x + w, y + d, h], [x + w, y, h]], shade(wall, .78));
+  poly(g, [[x, y + d, 0], [x + w, y + d, 0], [x + w, y + d, h], [x, y + d, h]], shade(wall, .95));
+  poly(g, [[x, y, h], [x + w, y, h], [x + w, y + d, h], [x, y + d, h]], roof);
+}
+function gable(g, x, y, w, d, h, rh, wall, roof, alongX) {
+  box(g, x, y, w, d, h, wall, 'rgba(0,0,0,0)');
+  if (alongX) { // ridge runs along x
+    poly(g, [[x + w, y, h], [x + w, y + d, h], [x + w, y + d / 2, h + rh]], shade(wall, .8));
+    poly(g, [[x, y + d, h], [x + w, y + d, h], [x + w, y + d / 2, h + rh], [x, y + d / 2, h + rh]], shade(roof, 1.0));
+    poly(g, [[x, y, h], [x + w, y, h], [x + w, y + d / 2, h + rh], [x, y + d / 2, h + rh]], shade(roof, .7));
+  } else { // ridge runs along y
+    poly(g, [[x, y + d, h], [x + w, y + d, h], [x + w / 2, y + d, h + rh]], shade(wall, .95));
+    poly(g, [[x + w, y, h], [x + w, y + d, h], [x + w / 2, y + d, h + rh], [x + w / 2, y, h + rh]], shade(roof, .85));
+    poly(g, [[x, y, h], [x, y + d, h], [x + w / 2, y + d, h + rh], [x + w / 2, y, h + rh]], shade(roof, 1.05));
+  }
+}
+function ellipse(g, cx, cy, rx, ry, fill) { const [sx, sy] = P(cx, cy, 0); g.beginPath(); g.ellipse(sx, sy, rx * S, ry * S / 2 * 1.0, 0, 0, Math.PI * 2); g.fillStyle = fill; g.fill(); }
+function dome(g, cx, cy, r, h, wall, roof) {
+  const [bx, by] = P(cx, cy, 0), [tx, ty] = P(cx, cy, h), [rx, ry] = [r * S * 1.414, r * S * .707];
+  g.fillStyle = shade(wall, .9); g.beginPath(); g.ellipse(bx, by, rx, ry, 0, 0, Math.PI); g.lineTo(rx + bx - 2 * rx, by); g.fill();
+  g.fillStyle = shade(wall, .9); g.fillRect(bx - rx, ty + ry * .6, rx * 2, by - ty - ry * .6);
+  g.beginPath(); g.ellipse(bx, by, rx, ry, 0, 0, Math.PI); g.fillStyle = shade(wall, .85); g.fill();
+  const [ax, ay] = P(cx, cy, h * 1.9);
+  g.beginPath(); g.moveTo(bx - rx * 1.15, ty + ry * .3); g.lineTo(ax, ay); g.lineTo(bx + rx * 1.15, ty + ry * .3);
+  g.ellipse(bx, ty + ry * .3, rx * 1.15, ry * 1.15, 0, 0, Math.PI); g.closePath(); g.fillStyle = roof; g.fill();
+}
+function shadowTile(g, x, y, w, d, a = .18) { poly(g, [[x + .1, y + .1, 0], [x + w + .6, y + .1, 0], [x + w + .6, y + d + .6, 0], [x + .1, y + d + .6, 0]], `rgba(0,0,0,${a})`); }
+
+// ---- layouts: slots on a jittered ring/grid, rotated by 90deg steps for orientation variety ----
+function slots(r, n, spread) {
+  const out = [];
+  for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2 + r() * .5, d = spread * (.55 + r() * .6); out.push([Math.cos(a) * d, Math.sin(a) * d]); }
+  return out;
+}
+const PAL = ['#f4e3c1', '#f0cfa0', '#e8d9b8', '#d9c7a3', '#f7ecd2'];
+const ROOF = ['#c9553d', '#d98a3a', '#b8473a', '#e0a24a', '#a8523f'];
+
+const STYLES = [
+  { name: '1. Blocks', note: 'Flat-roofed boxes, pastel. Very abstract, reads at any size.',
+    draw(g, r) { const s = slots(r, 5 + (r() * 2 | 0), 2.6).sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+      s.forEach(([x, y]) => { const w = .9 + r() * .8, d = .9 + r() * .8, h = .8 + r() * 1.2; shadowTile(g, x, y, w, d); box(g, x, y, w, d, h, PAL[r() * 5 | 0], shade(ROOF[r() * 5 | 0], 1.0)); }); } },
+  { name: '2. Gabled houses', note: 'Pitched roofs; each house faces a random way, so orientation varies per building.',
+    draw(g, r) { const s = slots(r, 5, 2.7).sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+      s.forEach(([x, y]) => { const w = 1.1 + r() * .7, d = .9 + r() * .5; shadowTile(g, x, y, w, d); gable(g, x, y, w, d, .8, .75, PAL[r() * 5 | 0], ROOF[r() * 5 | 0], r() > .5); }); } },
+  { name: '3. Round huts', note: 'Domes with cone roofs and a central fire: closest to the current hut art, but simplified.',
+    draw(g, r) { const s = slots(r, 5, 2.4).sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+      ellipse(g, 0, 0, 1.0, 1.0, 'rgba(120,90,60,.35)'); ellipse(g, 0, 0, .35, .35, '#ee8a30');
+      s.forEach(([x, y]) => { ellipse(g, x + .15, y + .2, 1.05, 1.05, 'rgba(0,0,0,.15)'); dome(g, x, y, .62 + r() * .2, .7, PAL[r() * 5 | 0], '#d8a845'); }); } },
+  { name: '4. Flat roofs only', note: 'Just coloured diamonds with a soft shadow. The most abstract; tiny and cheap.',
+    draw(g, r) { const s = slots(r, 7, 2.9).sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+      s.forEach(([x, y]) => { const w = .8 + r() * .9, d = .8 + r() * .9; poly(g, [[x + .12, y + .12, 0], [x + w + .12, y + .12, 0], [x + w + .12, y + d + .12, 0], [x + .12, y + d + .12, 0]], 'rgba(0,0,0,.2)'); poly(g, [[x, y, .15], [x + w, y, .15], [x + w, y + d, .15], [x, y + d, .15]], ROOF[r() * 5 | 0], shade('#6a3a2a', 1)); }); } },
+  { name: '5. Hamlet on a path', note: 'Gabled houses lined along a bending dirt path; clearer "village" read, directional.',
+    draw(g, r) { const flip = r() > .5; const pts = [[-3, -1.2], [-1, -.2], [.8, .4], [3, 1.2]].map(([x, y]) => flip ? [y, x] : [x, y]);
+      g.lineJoin = 'round'; g.lineCap = 'round'; g.strokeStyle = '#d9c28c'; g.lineWidth = S * .9;
+      g.beginPath(); pts.forEach(([x, y], i) => { const [sx, sy] = P(x, y, 0); i ? g.lineTo(sx, sy) : g.moveTo(sx, sy); }); g.stroke();
+      const hs = []; pts.forEach(([x, y]) => { for (const side of [-1, 1]) if (r() > .25) hs.push(flip ? [x + side * 1.5 - .5, y - .5] : [x - .5, y + side * 1.5 - .5]); });
+      hs.sort((a, b) => a[0] + a[1] - (b[0] + b[1])).forEach(([x, y]) => { shadowTile(g, x, y, 1, 1); gable(g, x, y, 1, 1, .7, .6, PAL[r() * 5 | 0], ROOF[r() * 5 | 0], r() > .5); }); } },
+  { name: '6. Rotated roofs (top-down)', note: 'Roofs as rotated rectangles at any angle: real orientation variety, very abstract.',
+    draw(g, r) { const s = slots(r, 6, 2.6);
+      s.forEach(([cx, cy]) => { const a = r() * Math.PI, w = .9 + r() * .8, d = .6 + r() * .4, c = Math.cos(a), sn = Math.sin(a);
+        const q = (u, v) => [cx + u * c - v * sn, cy + u * sn + v * c, .3];
+        poly(g, [[q(-w / 2 + .2, -d / 2 + .2)[0], q(-w / 2 + .2, -d / 2 + .2)[1], 0], [q(w / 2 + .2, -d / 2 + .2)[0], q(w / 2 + .2, -d / 2 + .2)[1], 0], [q(w / 2 + .2, d / 2 + .2)[0], q(w / 2 + .2, d / 2 + .2)[1], 0], [q(-w / 2 + .2, d / 2 + .2)[0], q(-w / 2 + .2, d / 2 + .2)[1], 0]], 'rgba(0,0,0,.2)');
+        poly(g, [q(-w / 2, -d / 2), q(w / 2, -d / 2), q(w / 2, d / 2), q(-w / 2, d / 2)], ROOF[r() * 5 | 0], '#5a3326');
+        poly(g, [q(-w / 2, 0), q(w / 2, 0), q(w / 2, .02), q(-w / 2, .02)], '#5a3326', '#5a3326'); }); } },
+];
+
+const root = document.getElementById('root');
+STYLES.forEach((st) => {
+  const sec = document.createElement('div'); sec.className = 'style';
+  sec.innerHTML = `<h2>${st.name}</h2><p>${st.note}</p>`;
+  const row = document.createElement('div'); row.className = 'row';
+  for (let i = 0; i < 4; i++) {
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    // ground patch: a grass diamond with a sand rim, like a village island
+    poly(g, [[-5, -5, 0], [5, -5, 0], [5, 5, 0], [-5, 5, 0]], '#e6d49a');
+    poly(g, [[-4.4, -4.4, 0], [4.4, -4.4, 0], [4.4, 4.4, 0], [-4.4, 4.4, 0]], '#9cc56f');
+    st.draw(g, rng(1000 + i * 77 + st.name.length));
+    row.appendChild(c);
+  }
+  sec.appendChild(row); root.appendChild(sec);
+});
+</script>
+</body>
+</html>

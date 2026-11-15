@@ -1,0 +1,361 @@
+{
+  "water.shallow": [
+    {
+      "file": "water/shallow.png",
+      "cells": 1
+    }
+  ],
+  "water.deep": [
+    {
+      "file": "water/deep.png",
+      "cells": 1
+    }
+  ],
+  "water.reef": [
+    {
+      "file": "water/reef.png",
+      "cells": 1
+    }
+  ],
+  "shore.water": [
+    {
+      "file": "shore/water.png"
+    }
+  ],
+  "shore.sand": [
+    {
+      "file": "shore/sand.png"
+    }
+  ],
+  "ground.sand": [
+    {
+      "file": "shore/sand.png"
+    }
+  ],
+  "shore.edge.n": [
+    {
+      "file": "shore/edge_n_0.png",
+      "weight": 3
+    },
+    {
+      "file": "shore/edge_n_1.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_n_2.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_n_3.png",
+      "weight": 1
+    }
+  ],
+  "shore.edge.e": [
+    {
+      "file": "shore/edge_e_0.png",
+      "weight": 3
+    },
+    {
+      "file": "shore/edge_e_1.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_e_2.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_e_3.png",
+      "weight": 1
+    }
+  ],
+  "shore.edge.s": [
+    {
+      "file": "shore/edge_s_0.png",
+      "weight": 3
+    },
+    {
+      "file": "shore/edge_s_1.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_s_2.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_s_3.png",
+      "weight": 1
+    }
+  ],
+  "shore.edge.w": [
+    {
+      "file": "shore/edge_w_0.png",
+      "weight": 3
+    },
+    {
+      "file": "shore/edge_w_1.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_w_2.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_w_3.png",
+      "weight": 1
+    }
+  ],
+  "shore.outer.nw": [
+    {
+      "file": "shore/outer_nw.png"
+    }
+  ],
+  "shore.outer.ne": [
+    {
+      "file": "shore/outer_ne.png"
+    }
+  ],
+  "shore.outer.se": [
+    {
+      "file": "shore/outer_se.png"
+    }
+  ],
+  "shore.outer.sw": [
+    {
+      "file": "shore/outer_sw.png"
+    }
+  ],
+  "shore.inner.nw": [
+    {
+      "file": "shore/inner_nw.png"
+    }
+  ],
+  "shore.inner.ne": [
+    {
+      "file": "shore/inner_ne.png"
+    }
+  ],
+  "shore.inner.se": [
+    {
+      "file": "shore/inner_se.png"
+    }
+  ],
+  "shore.inner.sw": [
+    {
+      "file": "shore/inner_sw.png"
+    }
+  ],
+  "objects.tree.conifer": [
+    {
+      "file": "objects/tree_conifer_00.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 3
+    },
+    {
+      "file": "objects/tree_conifer_01.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 2
+    },
+    {
+      "file": "objects/tree_conifer_02.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 1
+    },
+    {
+      "file": "objects/tree_conifer_03.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 2
+    }
+  ],
+  "objects.tree.leafy": [
+    {
+      "file": "objects/tree_leafy_00.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 3
+    },
+    {
+      "file": "objects/tree_leafy_01.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 2
+    },
+    {
+      "file": "objects/tree_leafy_02.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 1
+    },
+    {
+      "file": "objects/tree_leafy_03.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 1
+    }
+  ],
+  "objects.tree.bush": [
+    {
+      "file": "objects/tree_bush_00.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 0.75,
+      "shadowInTiles": 0.5,
+      "weight": 3
+    },
+    {
+      "file": "objects/tree_bush_01.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 2
+    }
+  ],
+  "objects.tree.dead": [
+    {
+      "file": "objects/tree_dead_00.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 1
+    }
+  ],
+  "objects.hut.small": [
+    {
+      "file": "objects/hut_small_00.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_small_01.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_small_02.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    }
+  ],
+  "objects.hut.medium": [
+    {
+      "file": "objects/hut_medium_00.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 2
+    },
+    {
+      "file": "objects/hut_medium_01.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_medium_02.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_medium_03.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    }
+  ],
+  "objects.hut.large": [
+    {
+      "file": "objects/hut_large_00.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_large_01.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_large_02.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    }
+  ]
+}

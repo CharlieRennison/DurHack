@@ -6,6 +6,8 @@ import type { RepoNode } from '../types';
 import type { Manifest, ManifestEntry } from './manifest';
 
 export type { Manifest, ManifestEntry } from './manifest';
+export { loadFunctions, loadRepoLive, type LiveMeta, type LiveOptions } from './live';
+export { parseRepoUrl, type RepoRef } from './repoUrl';
 
 const DEMO_DIR = '/demo/';
 

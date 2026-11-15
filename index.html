@@ -10,8 +10,26 @@
     <div id="overlay">
       <div id="topbar">
         <select id="repo-select" aria-label="Repository"></select>
+        <form id="gh-form" autocomplete="off">
+          <input id="gh-input" type="text" spellcheck="false" placeholder="github.com/owner/repo" aria-label="GitHub link" />
+          <button id="gh-load" type="submit">Load</button>
+        </form>
         <nav id="breadcrumb"></nav>
       </div>
+      <div id="settings">
+        <button id="settings-btn" type="button" aria-label="Settings" aria-expanded="false" title="Settings">&#9881;</button>
+        <div id="settings-panel" hidden>
+          <label for="gh-token">GitHub token <span class="dim">(optional)</span></label>
+          <input id="gh-token" type="password" autocomplete="off" spellcheck="false" placeholder="Only needed for private repos or rate limits" />
+          <div class="row">
+            <button id="gh-token-save" type="button">Save</button>
+            <button id="gh-token-clear" type="button">Clear</button>
+            <span id="gh-token-state" class="dim"></span>
+          </div>
+          <p class="dim">Kept only in this browser. Never sent anywhere except api.github.com.</p>
+        </div>
+      </div>
+      <div id="live-status" hidden></div>
       <div id="inspect"></div>
       <div id="pizza"></div>
     </div>

@@ -14,3 +14,14 @@ export function neighbors(x: number, y: number): [number, number][] {
   }
   return out;
 }
+
+/** In-bounds 8-neighbours (the 4 above plus the diagonals). Used for blob smoothing. */
+export function neighbors8(x: number, y: number): [number, number][] {
+  const out: [number, number][] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if ((dx !== 0 || dy !== 0) && inBounds(x + dx, y + dy)) out.push([x + dx, y + dy]);
+    }
+  }
+  return out;
+}

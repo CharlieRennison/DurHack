@@ -126,6 +126,8 @@ export class Renderer {
   private pointer: { x: number; y: number } | null = null;
   private hover: { view: View; x: number; y: number } | null = null;
   private labelViews: View[] = [];
+  /** Campfires on screen-able village views, flickered every frame while their view is visible. */
+  private fires: { sprite: Sprite; glow: Sprite; view: View; phase: number; base: number }[] = [];
   private chain: View[] = [];
   private chainKey = '';
   /** Tile kit (manifest art with code-drawn placeholders); null only if it failed to build, then flat colours are drawn. */
@@ -147,6 +149,7 @@ export class Renderer {
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.world);
     this.bindInput(this.app.canvas);
+    this.app.ticker.add(() => this.animateFires());
     try {
       this.kit = await loadTileKit();
     } catch (e) {
@@ -162,6 +165,7 @@ export class Renderer {
     this.world.removeChildren().forEach((c) => c.destroy({ children: true }));
     this.labels = new Container();
     this.labelViews = [];
+    this.fires = [];
     this.root = this.makeView(root, 0, undefined, undefined);
     this.world.addChild(this.root.container, this.labels);
     this.fitCamera();
@@ -457,7 +461,22 @@ export class Renderer {
     const sceneryCells = new Map<string, { i: number; j: number }[]>();
     for (const { i, j, type } of cells) {
       const hash = ((Math.imul(i + 1, 73856093) ^ Math.imul(j + 1, 19349663) ^ Math.imul(v.depth + 7, 83492791)) >>> 0) % 1000;
-      if (type === 'island' || type === 'coast' || type === 'village' || type === 'port' || type === 'tree') {
+      if (type === 'village') {
+        // Open village ground: dirt paths and plazas; a campfire stands on its own spot.
+        const dirt = this.groundSprite(kit.ground('dirt', hash, [0, 0, 0, 0]), i, j);
+        if (grid[j][i].variant === 1) dirt.tint = 0xf2e6d4;
+        layer.addChild(dirt);
+        if (grid[j][i].variant === 2) {
+          const art = kit.campfire(hash);
+          const sp = this.objectSprite(art, i + 0.5, j + 0.5, 1, TILE_H * 0.1);
+          const glow = this.objectSprite(kit.shadow, i + 0.5, j + 0.5, 4.6 / kit.shadow.widthInTiles, TILE_H * 0.1);
+          glow.tint = 0xff9a2e;
+          glow.blendMode = 'add';
+          glow.alpha = 0.3;
+          decor.push({ gx: i + j + 0.4, gy: 0, sprite: sp, shadow: glow });
+          this.fires.push({ sprite: sp, glow, view: v, phase: ((hash * 7) % 628) / 100, base: sp.scale.y });
+        }
+      } else if (type === 'island' || type === 'coast' || type === 'port' || type === 'tree') {
         const kind = type === 'coast' || type === 'port' ? 'sand' : 'grass';
         const edges: Edge[] = [0, 1, 2, 3].map((s) => {
           const n = classOf(i + SIDE_DX[s], j + SIDE_DY[s]);
@@ -675,6 +694,18 @@ export class Renderer {
     v.label.alpha = clamp01((r - 0.1) / 0.1) * (1 - this.depthT(v.depth + 1));
     v.label.visible = v.container.visible && v.label.alpha > 0.01;
     v.label.scale.set(1 / this.world.scale.x);
+  }
+
+  /** A gentle flicker: the flames breathe a little and the glow pulses (only for campfires whose view is showing). */
+  private animateFires(): void {
+    if (this.fires.length === 0) return;
+    const t = performance.now() / 1000;
+    for (const f of this.fires) {
+      if (!f.view.container.visible) continue;
+      const a = Math.sin(t * 7 + f.phase) * 0.5 + Math.sin(t * 13.3 + f.phase * 2) * 0.5;
+      f.sprite.scale.y = f.base * (1 + 0.035 * a);
+      f.glow.alpha = (0.26 + 0.1 * a) * f.view.alpha;
+    }
   }
 
   /** Labels that would overlap a bigger island's label (bigger view first) are hidden at the current zoom. */

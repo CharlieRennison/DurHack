@@ -3,6 +3,7 @@ import { inBounds, neighbors, neighbors8 } from '../grid';
 import { GRID_SIZE, type Grid, type RepoNode, type Tile } from '../types';
 import { effectiveChildren, isVillage, LOOSE_FILES_SUFFIX } from './children';
 import { hashString, mulberry32 } from './rng';
+import { planVillage } from './villageTemplates';
 
 const MAX_CHILDREN = 100;
 
@@ -52,7 +53,7 @@ export function layoutNode(node: RepoNode, _depth: number, allowed?: boolean[][]
     .sort((a, b) => home(a) - home(b) || b.size - a.size || a.id.localeCompare(b.id))
     .slice(0, MAX_CHILDREN);
   if (kids.length === 0) return grid;
-  if (isVillage(node)) return layoutVillage(grid, kids, allowed, rand);
+  if (isVillage(node)) return layoutVillage(grid, kids, allowed, rand, node.path);
   return layoutCluster(grid, kids, allowed, rand);
 }
 
@@ -387,7 +388,7 @@ function spreadSeeds(n: number, cells: [number, number][], rand: () => number): 
 
 // ---- villages (houses placed directly) -----------------------------------------------------------------
 
-function layoutVillage(grid: Grid, kids: RepoNode[], allowed: boolean[][] | undefined, rand: () => number): Grid {
+function layoutVillage(grid: Grid, kids: RepoNode[], allowed: boolean[][] | undefined, rand: () => number, seed: string): Grid {
   const gap = VILLAGE_GAP;
   const noise = createNoise2D(rand);
   const sorted = kids;
@@ -403,7 +404,12 @@ function layoutVillage(grid: Grid, kids: RepoNode[], allowed: boolean[][] | unde
   const owner: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(-1));
   let budgetScale = 1;
   let seeds: [number, number][];
-  if (allowed) {
+  // Inside an islet the village follows a template (hamlet, ring, street...): houses, plazas with campfires and paths.
+  const plan = allowed ? planVillage(sorted.length, allowed, seed) : null;
+  if (plan && plan.houses.length === sorted.length) {
+    seeds = plan.houses; // most central first, and the kids are sorted biggest first
+    for (const [x, y] of [...plan.plazas, ...plan.paths]) owner[y][x] = -2; // reserved: houses never grow over them
+  } else if (allowed) {
     seeds = spreadSeeds(sorted.length, okCells, rand);
   } else {
     const placed = packSeeds(sorted.length, weights.map((w) => (w / totalW) * landBudget), centre, rand, gap);
@@ -454,6 +460,12 @@ function layoutVillage(grid: Grid, kids: RepoNode[], allowed: boolean[][] | unde
       st.frontier.push([nx, ny]);
       st.count++;
     });
+  }
+  // Plazas, campfire spots and paths: 'village' tiles with no nodeId (variant 0 path, 1 plaza, 2 campfire).
+  if (plan && plan.houses.length === sorted.length) {
+    for (const [x, y] of plan.paths) grid[y][x] = { type: 'village', variant: 0, height: 0 };
+    for (const [x, y] of plan.plazas) grid[y][x] = { type: 'village', variant: 1, height: 0 };
+    for (const [x, y] of plan.fires) grid[y][x] = { type: 'village', variant: 2, height: 0 };
   }
   return grid;
 }
@@ -518,7 +530,7 @@ function tooCloseToOther(owner: number[][], x: number, y: number, me: number, ga
     for (let dx = -gap; dx <= gap; dx++) {
       if (!inBounds(x + dx, y + dy)) continue;
       const o = owner[y + dy][x + dx];
-      if (o !== -1 && o !== me) return true;
+      if (o !== -1 && o !== -2 && o !== me) return true;
     }
   }
   return false;

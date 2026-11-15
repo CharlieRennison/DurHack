@@ -357,5 +357,16 @@
       "widthInTiles": 1.0,
       "weight": 1
     }
+  ],
+  "objects.campfire": [
+    {
+      "file": "objects/campfire_00.png",
+      "anchor": [
+        0.5,
+        0.8
+      ],
+      "widthInTiles": 2.2,
+      "shadowInTiles": 1.6
+    }
   ]
 }

@@ -147,10 +147,10 @@ function softShadow(g: Ctx, x: number, y: number, rx: number, ry: number, alpha:
 }
 
 /** A flat ground square: base colour with a few soft blotches kept away from the edges (so tiles join cleanly). */
-function placeholderGround(kind: 'grass' | 'sand', variant: number): HTMLCanvasElement {
+function placeholderGround(kind: 'grass' | 'sand' | 'dirt', variant: number): HTMLCanvasElement {
   const { c, g } = canvas(TS, TS);
-  const rnd = seeded(variant * 7919 + (kind === 'grass' ? 11 : 97));
-  g.fillStyle = kind === 'grass' ? P.grass : P.sand;
+  const rnd = seeded(variant * 7919 + (kind === 'grass' ? 11 : kind === 'dirt' ? 53 : 97));
+  g.fillStyle = kind === 'grass' ? P.grass : kind === 'dirt' ? P.dirt : P.sand;
   g.fillRect(0, 0, TS, TS);
   for (let n = 0; n < 7; n++) {
     const x = 24 + rnd() * (TS - 48);
@@ -397,6 +397,16 @@ export class TileKit {
         out.push(this.sprite(c, [0.5, 0.6], 0.9));
         break;
       }
+      case 'objects.campfire': {
+        const { c, g } = canvas(32, 32);
+        softShadow(g, 16, 24, 11, 4, 0.3);
+        for (let a = 0; a < 8; a++) ellipse(g, 16 + Math.cos(a * 0.785) * 9, 24 + Math.sin(a * 0.785) * 3.2, 2.4, 1.8, P.stone);
+        poly(g, [[16, 7], [22, 20], [10, 20]], P.fire[0]);
+        poly(g, [[16, 11], [20, 21], [12, 21]], P.fire[1]);
+        poly(g, [[16, 15], [18, 22], [14, 22]], P.fire[2]);
+        out.push(this.sprite(c, [0.5, 0.8], 2.2));
+        break;
+      }
       case 'objects.shadow': {
         const { c, g } = canvas(64, 32);
         softShadow(g, 32, 16, 30, 14, 0.45);
@@ -475,6 +485,10 @@ export class TileKit {
   tree(kind: TreeKind, hash: number): Sprite3D {
     return this.pick('objects.tree.' + kind, hash);
   }
+  /** A campfire (flames in a ring of stones). */
+  campfire(hash: number): Sprite3D {
+    return this.pick('objects.campfire', hash);
+  }
   coral(hash: number): Sprite3D {
     return this.pick('objects.coral', hash);
   }
@@ -519,7 +533,7 @@ export class TileKit {
     return t;
   }
 
-  private groundVariants(kind: 'grass' | 'sand'): HTMLCanvasElement[] {
+  private groundVariants(kind: 'grass' | 'sand' | 'dirt'): HTMLCanvasElement[] {
     let v = this.groundBase.get(kind);
     if (v) return v;
     const real = this.art.get('ground.' + kind);
@@ -543,7 +557,7 @@ export class TileKit {
   }
 
   /** The flat square texture for a ground tile (grass or sand) with the given edges. Cached in the atlas. */
-  ground(kind: 'grass' | 'sand', variant: number, edges: Edge[]): Texture {
+  ground(kind: 'grass' | 'sand' | 'dirt', variant: number, edges: Edge[]): Texture {
     const bases = this.groundVariants(kind);
     const n = bases.length;
     const v = ((variant % n) + n) % n;

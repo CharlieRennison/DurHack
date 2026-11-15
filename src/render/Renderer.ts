@@ -3,6 +3,8 @@ import { GRID_SIZE, type Grid, type RepoNode, type Tile } from '../types';
 import { effectiveChildren, forgetNode, isVillage, LOOSE_FILES_SUFFIX } from '../layout/children';
 import { gridToScreen, screenToCell, TILE_H, TILE_W } from './iso';
 import { HIGHLIGHT, PALETTE, WATER } from './palette';
+import { placeScenery } from './scenery';
+import { placeHouses } from './village';
 import { Edge, loadTileKit, type Sprite3D, type TileKit } from './tiles';
 
 export interface HoverInfo {
@@ -452,6 +454,7 @@ export class Renderer {
     const seedX = (seedH % 997) * 3.17;
     const seedY = ((seedH >>> 10) % 991) * 2.71;
 
+    const sceneryCells = new Map<string, { i: number; j: number }[]>();
     for (const { i, j, type } of cells) {
       const hash = ((Math.imul(i + 1, 73856093) ^ Math.imul(j + 1, 19349663) ^ Math.imul(v.depth + 7, 83492791)) >>> 0) % 1000;
       if (type === 'island' || type === 'coast' || type === 'village' || type === 'port' || type === 'tree') {
@@ -489,37 +492,15 @@ export class Renderer {
           const dock = this.objectSprite(kit.port(hash), i + 0.5, j + 0.5);
           decor.push({ gx: i + j + 0.5, gy: 0, sprite: dock });
         }
-        // Scenery on inland grass. Trees grow in clumps: a smooth noise field gives dense groves and open
-        // meadows, and a second, larger field makes whole patches of conifers or leafy trees. A tree needs
-        // grass all around it, so narrow shoreline strips never get one hanging over the water.
+        // Inland grass away from the shore and the village core may carry scenery; it is placed per islet after
+        // this loop (src/render/scenery.ts), so density and spacing are controlled instead of rolled per cell.
         const core = villageCore.get(grid[j][i].nodeId ?? '');
-        const inVillageCore = !!core && Math.hypot(i + 0.5 - core.x, j + 0.5 - core.y) < core.r * 0.55;
-        if (kind === 'grass' && !shoreTex && type === 'island' && !inVillageCore && edges.every((e) => e === Edge.None)) {
-          const roll = hash / 1000;
-          const grove = valueNoise(i * 0.24 + seedX, j * 0.24 + seedY);
-          const patch = valueNoise(i * 0.11 + seedY, j * 0.11 + seedX);
-          let art: Sprite3D | null = null;
-          let widthScale = 1;
-          if (grove > 0.4 && roll < (grove - 0.28) * 2.2 && this.grassAround(grid, i, j, 1)) {
-            const k = roll < 0.012 ? 'dead' : patch > 0.5 ? 'conifer' : 'leafy';
-            art = kit.tree(k, hash);
-            widthScale = 0.9 + ((hash >> 3) % 9) * 0.04; // 0.9 - 1.2 of the art's width
-          } else if (grove > 0.3 && roll > 0.965) {
-            art = kit.tree('bush', hash);
-          } else if (hash % 13 === 0) {
-            art = hash % 2 === 0 ? kit.rock(hash) : kit.tuft(hash);
-          }
-          if (art) {
-            const gx = i + 0.5 + (((hash >> 2) % 5) - 2) * 0.06;
-            const gy = j + 0.5 + (((hash >> 4) % 5) - 2) * 0.06;
-            const sp = this.objectSprite(art, gx, gy, widthScale, TILE_H * 0.3);
-            if (hash % 2 === 1) sp.scale.x = -sp.scale.x; // mirror half of them: same tree, different look
-            const shade = 232 + ((hash >> 5) % 24); // slight brightness variation
-            sp.tint = (shade << 16) | (shade << 8) | shade;
-            const sh = this.objectSprite(kit.shadow, gx, gy, (art.widthInTiles * widthScale * 0.9) / kit.shadow.widthInTiles, TILE_H * 0.3);
-            sh.alpha = 0.8;
-            decor.push({ gx: i + j, gy: 0, sprite: sp, shadow: sh });
-          }
+        const inVillageCore = !!core && Math.hypot(i + 0.5 - core.x, j + 0.5 - core.y) < core.r * 0.3;
+        const owner = grid[j][i].nodeId;
+        if (owner && kind === 'grass' && !shoreTex && type === 'island' && !inVillageCore && edges.every((e) => e === Edge.None) && this.grassAround(grid, i, j, 1)) {
+          const list = sceneryCells.get(owner) ?? [];
+          list.push({ i, j });
+          sceneryCells.set(owner, list);
         }
       } else if (type === 'house') {
         const id = grid[j][i].nodeId ?? '';
@@ -531,10 +512,38 @@ export class Renderer {
       }
     }
 
-    // A village island shows village art, not one hut per file: a handful of files per cluster, each
-    // cluster sized to the island so it never towers over the ground. Every house still owns its tiles
-    // (hover and zoom work per file); the art is scenery drawn over them.
-    if (houses.size > 0) {
+    for (const [owner, list] of sceneryCells) {
+      for (const p of placeScenery(list, owner)) {
+        const art = p.kind === 'rock' ? kit.rock(p.hash) : p.kind === 'tuft' ? kit.tuft(p.hash) : kit.tree(p.kind, p.hash);
+        const gx = p.i + 0.5 + p.dx;
+        const gy = p.j + 0.5 + p.dy;
+        const sp = this.objectSprite(art, gx, gy, 1, TILE_H * 0.3);
+        if (p.hash % 2 === 1) sp.scale.x = -sp.scale.x; // mirror half of them: same tree, different look
+        const shade = 232 + ((p.hash >> 5) % 24); // slight brightness variation
+        sp.tint = (shade << 16) | (shade << 8) | shade;
+        const sh = this.objectSprite(kit.shadow, gx, gy, art.shadowInTiles / kit.shadow.widthInTiles, TILE_H * 0.3);
+        sh.alpha = 0.8;
+        decor.push({ gx: p.i + p.j + p.dx + p.dy, gy: 0, sprite: sp, shadow: sh });
+      }
+    }
+
+    // A village shows one house per file or function (src/render/village.ts): bigger code, bigger building. Every
+    // house still owns its patch of tiles, so hover and zoom work per file; the art is scenery drawn over them.
+    const hutArt = kit.hasArt('objects.hut.small') || kit.hasArt('objects.hut.medium') || kit.hasArt('objects.hut.large');
+    if (houses.size > 0 && hutArt) {
+      const sizeOf = new Map(v.node.children.map((c) => [c.id, c.size]));
+      const inputs = [...houses.entries()].map(([id, h]) => ({ id, x: h.sx / h.n, y: h.sy / h.n, n: h.n, size: sizeOf.get(id) ?? 0 }));
+      for (const p of placeHouses(inputs)) {
+        // fall back to a neighbouring size if the manifest has no art for this one
+        const size = kit.hasArt('objects.hut.' + p.size) ? p.size : kit.hasArt('objects.hut.medium') ? 'medium' : kit.hasArt('objects.hut.small') ? 'small' : 'large';
+        const art = kit.hut(size, p.hash);
+        const sp = this.objectSprite(art, p.x, p.y, p.widthInTiles / art.widthInTiles, TILE_H * 0.15);
+        if (p.hash % 2 === 1) sp.scale.x = -sp.scale.x;
+        const sh = this.objectSprite(kit.shadow, p.x, p.y, p.shadowInTiles / kit.shadow.widthInTiles, TILE_H * 0.15);
+        sh.alpha = 0.7;
+        decor.push({ gx: p.x + p.y, gy: 0, sprite: sp, shadow: sh });
+      }
+    } else if (houses.size > 0) {
       const all = [...houses.entries()].map(([id, h]) => ({ id, x: h.sx / h.n, y: h.sy / h.n, n: h.n }));
       let minX = Infinity;
       let maxX = -Infinity;

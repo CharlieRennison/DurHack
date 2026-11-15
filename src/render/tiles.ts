@@ -43,12 +43,16 @@ export interface Sprite3D {
   anchor: [number, number];
   /** Drawn width, in tiles. */
   widthInTiles: number;
+  /** Width of the soft shadow under it, in tiles (the image is usually wider than the object that casts it). */
+  shadowInTiles: number;
 }
 
 interface ManifestEntry {
   file: string;
   anchor?: [number, number];
   widthInTiles?: number;
+  /** Width of the shadow under the object, in tiles (default 0.9 x widthInTiles). */
+  shadowInTiles?: number;
   weight?: number;
   /** Water only: how many grid cells one copy of the image covers (default 1). */
   cells?: number;
@@ -246,12 +250,22 @@ export class TileKit {
     if (real && real.length > 0) {
       let cached = this.placeholders.get('real:' + category);
       if (!cached) {
-        cached = real.map(({ entry, img }) => ({
-          texture: Texture.from(img),
-          aspect: img.width / img.height,
-          anchor: entry.anchor ?? [0.5, 0.94],
-          widthInTiles: entry.widthInTiles ?? 0.8,
-        }));
+        cached = real.map(({ entry, img }) => {
+          const texture = Texture.from(img);
+          // Hand-drawn pixel art: crisp up close (nearest), smooth when zoomed out (mipmaps).
+          texture.source.style.magFilter = 'nearest';
+          texture.source.style.minFilter = 'linear';
+          texture.source.style.mipmapFilter = 'linear';
+          texture.source.autoGenerateMipmaps = true;
+          const widthInTiles = entry.widthInTiles ?? 0.8;
+          return {
+            texture,
+            aspect: img.width / img.height,
+            anchor: entry.anchor ?? [0.5, 0.94],
+            widthInTiles,
+            shadowInTiles: entry.shadowInTiles ?? widthInTiles * 0.9,
+          };
+        });
         this.placeholders.set('real:' + category, cached);
       }
       return cached;
@@ -269,7 +283,7 @@ export class TileKit {
   }
 
   private sprite(c: HTMLCanvasElement, anchor: [number, number], widthInTiles: number): Sprite3D {
-    return { texture: Texture.from(c), aspect: c.width / c.height, anchor, widthInTiles };
+    return { texture: Texture.from(c), aspect: c.width / c.height, anchor, widthInTiles, shadowInTiles: widthInTiles * 0.9 };
   }
 
   private makePlaceholder(category: string): Sprite3D[] {
@@ -425,6 +439,7 @@ export class TileKit {
       const y = py * (H - 20) + 14;
       const real = this.art.get('objects.hut.' + size);
       if (real && real.length > 0) {
+        g.imageSmoothingEnabled = false; // pixel art stays crisp
         const a = real[Math.floor(rnd() * real.length)];
         const hh = (w * 1.4) / (a.img.width / a.img.height);
         const ax = a.entry.anchor ?? [0.5, 0.85];
@@ -437,6 +452,15 @@ export class TileKit {
   }
 
   // ---- convenience wrappers (the renderer uses these) ----
+
+  /** Does the manifest have real art for this category? (placeholders do not count) */
+  hasArt(category: string): boolean {
+    return (this.art.get(category)?.length ?? 0) > 0;
+  }
+  /** One house of the given size (a file or function); `hash` picks the variant. */
+  hut(size: 'small' | 'medium' | 'large', hash: number): Sprite3D {
+    return this.pick('objects.hut.' + size, hash);
+  }
 
   /** A whole village: a small cluster of houses. `hash` picks the variant. */
   village(hash: number): Sprite3D {

@@ -143,5 +143,219 @@
     {
       "file": "shore/inner_sw.png"
     }
+  ],
+  "objects.tree.conifer": [
+    {
+      "file": "objects/tree_conifer_00.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 3
+    },
+    {
+      "file": "objects/tree_conifer_01.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 2
+    },
+    {
+      "file": "objects/tree_conifer_02.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 1
+    },
+    {
+      "file": "objects/tree_conifer_03.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 2
+    }
+  ],
+  "objects.tree.leafy": [
+    {
+      "file": "objects/tree_leafy_00.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 3
+    },
+    {
+      "file": "objects/tree_leafy_01.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 2
+    },
+    {
+      "file": "objects/tree_leafy_02.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 1
+    },
+    {
+      "file": "objects/tree_leafy_03.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 1
+    }
+  ],
+  "objects.tree.bush": [
+    {
+      "file": "objects/tree_bush_00.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 0.75,
+      "shadowInTiles": 0.5,
+      "weight": 3
+    },
+    {
+      "file": "objects/tree_bush_01.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 2
+    }
+  ],
+  "objects.tree.dead": [
+    {
+      "file": "objects/tree_dead_00.png",
+      "anchor": [
+        0.5,
+        0.875
+      ],
+      "widthInTiles": 1.2,
+      "shadowInTiles": 0.75,
+      "weight": 1
+    }
+  ],
+  "objects.hut.small": [
+    {
+      "file": "objects/hut_small_00.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_small_01.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_small_02.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    }
+  ],
+  "objects.hut.medium": [
+    {
+      "file": "objects/hut_medium_00.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 2
+    },
+    {
+      "file": "objects/hut_medium_01.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_medium_02.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_medium_03.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    }
+  ],
+  "objects.hut.large": [
+    {
+      "file": "objects/hut_large_00.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_large_01.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    },
+    {
+      "file": "objects/hut_large_02.png",
+      "anchor": [
+        0.5,
+        0.71875
+      ],
+      "widthInTiles": 1.0,
+      "weight": 1
+    }
   ]
 }

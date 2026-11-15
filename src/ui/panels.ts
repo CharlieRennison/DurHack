@@ -28,7 +28,22 @@ export function renderBreadcrumb(
   });
 }
 
-export function renderInspect(el: HTMLElement, tile: Tile | null, node: RepoNode | null): void {
+/** What a tile is, in words (not its raw type name). */
+export function describeTile(tile: Tile, node: RepoNode | null, loose = false): string {
+  if (loose) return 'Home islet (loose files)';
+  if (node) return node.kind === 'file' ? 'House (file)' : tile.type === 'ocean' || tile.type === 'coral' ? 'Waters of a folder' : 'Island (folder)';
+  switch (tile.type) {
+    case 'ocean': return tile.variant === 0 ? 'Deep sea' : 'Shallows';
+    case 'coast': return 'Shore';
+    case 'port': return 'Harbour';
+    case 'village': return tile.variant === 1 ? 'Plaza' : tile.variant === 2 ? 'Campfire' : 'Path';
+    case 'house': return 'House';
+    case 'tree': return 'Woodland';
+    default: return 'Land';
+  }
+}
+
+export function renderInspect(el: HTMLElement, tile: Tile | null, node: RepoNode | null, container: RepoNode | null = null, loose = false): void {
   el.replaceChildren();
   const line = (label: string, value: string) => {
     const d = document.createElement('div');
@@ -42,37 +57,13 @@ export function renderInspect(el: HTMLElement, tile: Tile | null, node: RepoNode
     line('Hover', 'a tile');
     return;
   }
-  line('Tile', tile.type);
-  if (node) {
+  line('Tile', describeTile(tile, node, loose));
+  if (node && !loose) {
     line('Name', node.name);
-    line('Kind', node.kind);
-    line('Size', String(node.size));
+    line('Size', `${node.size} ${node.kind === 'file' ? 'lines' : 'in total'}`);
+  } else if (container) {
+    line('In', container.path || container.name);
   }
-}
-
-/** Breakfast time (local), as hour and minute. */
-export const BREAKFAST = { hour: 9, minute: 30 };
-
-/** Time left until the next local hour:minute (today if still ahead, else tomorrow), as HH:MM:SS. Exported for testing. */
-export function untilTime(now: Date, hour: number, minute: number): string {
-  const target = new Date(now);
-  target.setHours(hour, minute, 0, 0);
-  if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
-  const total = Math.max(0, Math.round((target.getTime() - now.getTime()) / 1000));
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
-}
-
-/** Live "breakfast at 9:30" countdown, updated every second. */
-export function startBreakfastCountdown(el: HTMLElement): void {
-  const tick = () => {
-    const now = new Date();
-    const mins = now.getHours() * 60 + now.getMinutes() - (BREAKFAST.hour * 60 + BREAKFAST.minute);
-    // The first 10 minutes after 9:30: breakfast is here.
-    el.textContent = mins >= 0 && mins < 10 ? '🥐 Breakfast time!' : `🥐 Breakfast in ${untilTime(now, BREAKFAST.hour, BREAKFAST.minute)}`;
-  };
-  tick();
-  window.setInterval(tick, 1000);
 }
 
 /** Status / error line under the top bar. Empty text hides it. */

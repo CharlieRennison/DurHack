@@ -1,13 +1,12 @@
-import { Application, Container, Graphics, Matrix, Sprite, Text, TilingSprite, type Texture } from 'pixi.js';
+import { Application, Container, Graphics, Matrix, Sprite, Text, TilingSprite, Texture } from 'pixi.js';
 import { GRID_SIZE, type Grid, type RepoNode, type Tile } from '../types';
 import { effectiveChildren, forgetNode, isVillage, LOOSE_FILES_SUFFIX } from '../layout/children';
 import { gridToScreen, screenToCell, TILE_H, TILE_W } from './iso';
 import { HIGHLIGHT, PALETTE, WATER } from './palette';
 import { Gulls } from './gulls';
-import {
-  boatAt, boatsFor, centreOf, dashes, dockFor, lanesFor, lengthOf, pointAt, seeded, slice, smooth, waterRoute, type ImportEdge,
-} from './seaLanes';
 import { makeWalkers, stepWalker, walkableCells, walkerFrame, type Walker } from './people';
+import { languageOf, recolourPixels } from './language';
+import { kindOf, makeAnimals, makeDino, type Animal } from './animals';
 import { placeScenery } from './scenery';
 import { HOUSE_WIDTH, placeHouses } from './village';
 import { Edge, loadTileKit, type Sprite3D, type TileKit } from './tiles';
@@ -16,6 +15,8 @@ export interface HoverInfo {
   x: number;
   y: number;
   tile: Tile;
+  /** The folder or file whose view the tile is in. */
+  container: RepoNode;
 }
 
 export type Layout = (node: RepoNode, depth: number, allowed?: boolean[][]) => Grid;
@@ -69,8 +70,6 @@ interface View {
    * its view fades in (no flat blob with oversized trees left showing through).
    */
   ownerLayers: Map<string, Container>;
-  /** Boats sailing between this view's islands (sea lanes for imports), in their own layer above the scenery. */
-  boatLayer: Container | null;
 }
 
 /** A file's name floating above its house. Lives in the shared labels layer, at constant screen size. */
@@ -164,17 +163,6 @@ export class Renderer {
   private pointer: { x: number; y: number } | null = null;
   private hover: { view: View; x: number; y: number } | null = null;
   private islandLabels: IslandLabel[] = [];
-  /** Which files import which, and the boats that show it: one sea lane per pair of linked islands in a view. */
-  private imports: ImportEdge[] = [];
-  private drawnViews: View[] = [];
-  private boats: {
-    view: View; pts: [number, number][]; L: number; speed: number; phase: number; sprite: Sprite; frames: Texture[];
-    from: string; to: string; ab: number; ba: number; lastDir: number;
-  }[] = [];
-  private boatOverlay: Graphics | null = null;
-  private boatLabel: Text | null = null;
-  private hoveredBoat = -1;
-  private boatClock = 0;
   /** The camera flight in progress (a new one replaces it), and the ring that marks a searched-for file for a while. */
   private flyStep: (() => void) | null = null;
   private marker: { view: View; x: number; y: number; name: string; born: number } | null = null;
@@ -187,6 +175,9 @@ export class Renderer {
   private personLabel: Text | null = null;
   private hoveredPerson = -1;
   private peopleClock = 0;
+  /** Animals wandering the islands (one or two per island), in the layer of the view they live in. */
+  private animals: { a: Animal; view: View; sprite: Sprite; frames: Texture[] }[] = [];
+  private animalClock = 0;
   /** Seagulls flying across the foreground (null until the tile art is loaded). */
   private gulls: Gulls | null = null;
   private houseLabels: HouseLabel[] = [];
@@ -198,6 +189,8 @@ export class Renderer {
   private kit: TileKit | null = null;
 
   onHover: (info: HoverInfo | null) => void = () => {};
+  /** Called when the pointer is clicked (pressed and released without dragging) on a tile. */
+  onTileClick: (info: HoverInfo) => void = () => {};
   /** Called with the node stack (root first) whenever the current level changes. */
   onLevelChange: (nodes: RepoNode[]) => void = () => {};
   /**
@@ -216,7 +209,7 @@ export class Renderer {
     this.app.ticker.add(() => this.animateFires());
     this.app.ticker.add(() => this.gulls?.update(this.app.ticker.deltaMS / 1000));
     this.app.ticker.add(() => this.animatePeople(Math.min(this.app.ticker.deltaMS / 1000, 0.1)));
-    this.app.ticker.add(() => this.animateBoats(Math.min(this.app.ticker.deltaMS / 1000, 0.1)));
+    this.app.ticker.add(() => this.animateAnimals(Math.min(this.app.ticker.deltaMS / 1000, 0.1)));
     this.app.ticker.add(() => this.animateMarker());
     try {
       this.kit = await loadTileKit();
@@ -240,13 +233,8 @@ export class Renderer {
     this.flyStep = null;
     this.people = [];
     this.collaborators = []; // the new repo's names arrive with setCollaborators
-    this.imports = []; // and its import links with setImports
-    this.boats = [];
-    this.drawnViews = [];
-    this.boatOverlay = null;
-    this.boatLabel = null;
-    this.hoveredBoat = -1;
     this.homeSpot = null;
+    this.animals = [];
     this.personLabel = null;
     this.hoveredPerson = -1;
     this.fires = [];
@@ -349,226 +337,6 @@ export class Renderer {
     l.position.set(wx, wy - 30 / sc);
   }
 
-  /** Which files import which (edges by file path): boats sail between the islands that are linked. */
-  setImports(edges: ImportEdge[]): void {
-    this.imports = edges;
-    for (const v of this.drawnViews) this.spawnBoats(v);
-  }
-
-  /** (Re)create the boats for one view: a sea lane per pair of linked child islands, 1-3 boats on each. */
-  private spawnBoats(v: View): void {
-    this.boats = this.boats.filter((b) => {
-      if (b.view !== v) return true;
-      b.sprite.destroy();
-      return false;
-    });
-    this.hoveredBoat = -1;
-    const kit = this.kit;
-    if (!kit || !kit.hasArt('objects.boat') || this.imports.length === 0 || isVillage(v.node)) return;
-    const children = effectiveChildren(v.node).filter((c) => c.kind === 'folder');
-    if (children.length < 2) return;
-    const lanes = lanesFor(children, this.imports, effectiveChildren);
-    if (lanes.length === 0) return;
-    if (!v.boatLayer) {
-      // On top of the whole view, child islands included: a boat sails right up to an island's shore, which is
-      // drawn by that island's own view (above this one's ground).
-      v.boatLayer = new Container();
-      v.container.addChild(v.boatLayer);
-    }
-    const frames = kit.frames('objects.boat');
-    const textures = frames.map((f) => f.texture);
-    for (const lane of lanes) {
-      const A = children[lane.a];
-      const B = children[lane.b];
-      const ca = centreOf(v.grid, A.id);
-      const cb = centreOf(v.grid, B.id);
-      if (!ca || !cb) continue;
-      const da = dockFor(v.grid, A.id, cb, v.allowed);
-      const db = dockFor(v.grid, B.id, ca, v.allowed);
-      if (!da || !db) continue;
-      const route = waterRoute(v.grid, da, db, v.allowed);
-      if (!route || route.length < 2) continue;
-      // Each end goes on from the dock, through the island's own shallows, to just off its nearest shore: a boat
-      // starts at one island and ends at the other, not out in the open sea.
-      const pts = smooth(route);
-      const landA = this.landOf(v, A);
-      const landB = this.landOf(v, B);
-      const shoreA = this.shoreNear(landA, pts[0]);
-      const shoreB = this.shoreNear(landB, pts[pts.length - 1]);
-      if (shoreA) pts.unshift(shoreA);
-      if (shoreB) pts.push(shoreB);
-      const L = lengthOf(pts);
-      const seed = `${v.node.id}|${A.id}|${B.id}`;
-      for (let k = 0; k < boatsFor(lane.ab + lane.ba); k++) {
-        const sprite = new Sprite(textures[0]);
-        sprite.anchor.set(frames[0].anchor[0], frames[0].anchor[1]);
-        sprite.width = TILE_W * 0.7; // boats are small next to the islands
-        sprite.height = sprite.width / frames[0].aspect;
-        v.boatLayer.addChild(sprite);
-        this.boats.push({
-          view: v, pts, L, sprite, frames: textures,
-          speed: 0.9 + seeded(seed, k, 1) * 0.7, // cells per second, a little different for every boat
-          phase: seeded(seed, k), // where in its back-and-forth it starts: anywhere along the lane
-          from: A.name, to: B.name, ab: lane.ab, ba: lane.ba, lastDir: 1,
-        });
-      }
-    }
-  }
-
-  /**
-   * Where child island `c` has land, in this view's cell coordinates. An island with a view of its own shows its own
-   * islets (a cluster): their land is mapped up from its grid. A village sits on this view's islet: that land is used.
-   */
-  private landOf(v: View, c: RepoNode): [number, number][] {
-    const out: [number, number][] = [];
-    const isl = this.islandsOf(v).find((x) => x.child.id === c.id);
-    const isLand = (t: Tile) => t.type === 'island' || t.type === 'coast' || t.type === 'port' || t.type === 'tree';
-    if (isl && !isVillage(c)) {
-      const fp = isl.footprint;
-      const grid = this.gridFor(c, v.depth + 1, this.allowedFor(v, fp, c));
-      grid.forEach((row, j) => row.forEach((t, i) => {
-        if (isLand(t)) out.push([fp.bx + (i + 0.5) * fp.s, fp.by + (j + 0.5) * fp.s]);
-      }));
-    }
-    if (out.length === 0) {
-      v.grid.forEach((row, y) => row.forEach((t, x) => {
-        if (t.nodeId === c.id && isLand(t)) out.push([x + 0.5, y + 0.5]);
-      }));
-    }
-    return out;
-  }
-
-  /** A point just off the shore of `land` nearest to `from` (on the way in from `from`), or null if there is no land. */
-  private shoreNear(land: [number, number][], from: [number, number]): [number, number] | null {
-    let best: [number, number] | null = null;
-    let bd = Infinity;
-    for (const p of land) {
-      const d = Math.hypot(p[0] - from[0], p[1] - from[1]);
-      if (d < bd) {
-        bd = d;
-        best = p;
-      }
-    }
-    if (!best || bd < 0.6) return null;
-    const stop = 0.55; // stay this far (cells) off the land itself
-    const k = (bd - stop) / bd;
-    return [from[0] + (best[0] - from[0]) * k, from[1] + (best[1] - from[1]) * k];
-  }
-
-  /** Sail the boats, and on hover draw where the boat has been this trip and where it is going. */
-  private animateBoats(dt: number): void {
-    if (this.boats.length === 0) return;
-    this.boatClock += dt;
-    const t = this.boatClock;
-    // keep every view's boats above the child views that appear in it as you zoom
-    for (const v of new Set(this.boats.map((b) => b.view))) {
-      const bl = v.boatLayer;
-      if (bl && bl.parent === v.container && v.container.children[v.container.children.length - 1] !== bl) v.container.addChild(bl);
-    }
-    for (const b of this.boats) {
-      const shown = b.view.container.visible;
-      b.sprite.visible = shown;
-      if (!shown) continue;
-      const st = boatAt(b.L, b.speed, b.phase, t);
-      if (st.dir !== 0) b.lastDir = st.dir;
-      const p = pointAt(b.pts, st.s);
-      const pos = gridToScreen(p.x, p.y);
-      b.sprite.position.set(pos.x, pos.y + Math.sin(t * 2.2 + b.phase * 9) * 0.8);
-      b.sprite.texture = b.frames[Math.floor(t * 2 + b.phase * 4) % b.frames.length];
-      const screenDx = (p.dx - p.dy) * b.lastDir; // iso: screen x grows with x - y
-      const sx = Math.abs(b.sprite.scale.x);
-      if (Math.abs(screenDx) > 1e-3) b.sprite.scale.x = screenDx > 0 ? sx : -sx; // the art faces right
-    }
-    // hover: the front-most boat under the pointer
-    let hit = -1;
-    if (this.pointer) {
-      const rect = this.app.canvas.getBoundingClientRect();
-      const px = this.pointer.x - rect.left;
-      const py = this.pointer.y - rect.top;
-      this.boats.forEach((b, k) => {
-        if (!b.sprite.visible) return;
-        const r = b.sprite.getBounds();
-        const pad = 6;
-        if (px >= r.x - pad && px <= r.x + r.width + pad && py >= r.y - pad && py <= r.y + r.height + pad) hit = k;
-      });
-    }
-    if (hit !== this.hoveredBoat) {
-      this.hoveredBoat = hit;
-      if (this.hoveredPerson < 0) this.app.canvas.style.cursor = hit >= 0 ? 'pointer' : '';
-    }
-    if (hit < 0) {
-      if (this.boatOverlay) this.boatOverlay.visible = false;
-      if (this.boatLabel) this.boatLabel.visible = false;
-      return;
-    }
-    const b = this.boats[hit];
-    const v = b.view;
-    const st = boatAt(b.L, b.speed, b.phase, t);
-    // sailed this trip: from the dock it left to here; still to go: from here to the dock it is heading for
-    let done: [number, number][] = [];
-    let todo: [number, number][] = [];
-    let goalEnd: number;
-    if (st.dir > 0) {
-      done = slice(b.pts, 0, st.s);
-      todo = slice(b.pts, st.s, b.L);
-      goalEnd = b.L;
-    } else if (st.dir < 0) {
-      done = slice(b.pts, st.s, b.L);
-      todo = slice(b.pts, 0, st.s);
-      goalEnd = 0;
-    } else {
-      // waiting at a dock: the trip just made is behind it, the way back is ahead
-      done = b.pts;
-      todo = b.pts;
-      goalEnd = st.s === 0 ? b.L : 0;
-    }
-    if (!this.boatOverlay) this.boatOverlay = new Graphics();
-    const g = this.boatOverlay;
-    if (g.parent !== v.boatLayer) v.boatLayer?.addChildAt(g, 0);
-    g.visible = true;
-    g.clear();
-    const lw = 2.4 / (this.world.scale.x * v.f);
-    const toScreen = (pts: [number, number][]) => pts.map(([x, y]) => gridToScreen(x, y));
-    const sailed = toScreen(done);
-    if (st.dir !== 0 && sailed.length > 1) {
-      g.moveTo(sailed[0].x, sailed[0].y);
-      for (const q of sailed.slice(1)) g.lineTo(q.x, q.y);
-      g.stroke({ width: lw, color: 0xffffff, alpha: 0.9 });
-    }
-    const march = -t * b.speed; // dashes flow the way the boat is going
-    for (const [p0, p1] of dashes(st.dir < 0 ? [...todo].reverse() : todo, 0.45, 0.35, st.dir < 0 ? -march : march)) {
-      const a = gridToScreen(p0[0], p0[1]);
-      const c = gridToScreen(p1[0], p1[1]);
-      g.moveTo(a.x, a.y).lineTo(c.x, c.y);
-    }
-    g.stroke({ width: lw, color: 0xfff3a0, alpha: 0.95 });
-    const goal = pointAt(b.pts, goalEnd);
-    const start = pointAt(b.pts, goalEnd === 0 ? b.L : 0);
-    const gp = gridToScreen(goal.x, goal.y);
-    const sp = gridToScreen(start.x, start.y);
-    g.circle(gp.x, gp.y, lw * 3).fill({ color: 0xfff3a0, alpha: 0.95 });
-    g.circle(sp.x, sp.y, lw * 2.4).stroke({ width: lw * 0.8, color: 0xffffff, alpha: 0.9 });
-    // the label: who imports whom, and how often
-    if (!this.boatLabel) {
-      this.boatLabel = new Text({
-        text: '',
-        style: { fontSize: 12, fontWeight: '700', fill: 0xffffff, stroke: { color: 0x10233a, width: 4 }, align: 'center' },
-        resolution: 2,
-      });
-      this.boatLabel.anchor.set(0.5, 1);
-      this.labels.addChild(this.boatLabel);
-    }
-    // heading back (or waiting at the far dock, about to head back): to -> from; otherwise from -> to
-    const heading = st.dir < 0 || (st.dir === 0 && st.s > 0) ? `${b.to} → ${b.from}` : `${b.from} → ${b.to}`;
-    const counts = `${b.from} imports ${b.to}: ${b.ab}` + (b.ba ? `\n${b.to} imports ${b.from}: ${b.ba}` : '');
-    const text = `${heading}\n${counts}`;
-    if (this.boatLabel.text !== text) this.boatLabel.text = text;
-    const sc = this.world.scale.x;
-    this.boatLabel.position.set(v.ox + v.f * b.sprite.x, v.oy + v.f * (b.sprite.y - b.sprite.height) - 6 / sc);
-    this.boatLabel.scale.set(1 / sc);
-    this.boatLabel.visible = true;
-  }
-
   /** The repository's collaborators: a little person walks the root island for each of them. */
   setCollaborators(names: string[]): void {
     this.collaborators = names;
@@ -592,6 +360,42 @@ export class Renderer {
       sprite.height = sprite.width / frames[0].aspect;
       home.view.layer.addChild(sprite);
       this.people.push({ walker, sprite, frames: frames.map((f) => f.texture) });
+    }
+  }
+
+  /** Put one or two animals on each island of a freshly drawn view. */
+  private spawnAnimals(v: View, kit: TileKit, walkable: boolean[][], isRootHome: boolean): void {
+    // The root island has its collaborators and the baby dinosaur; every other island has its wildlife.
+    const wild = !isRootHome && kit.hasArt('objects.animal.0') ? makeAnimals(walkable, v.node.id) : [];
+    const dino = isRootHome && kit.hasArt('objects.dino') ? makeDino(walkable, v.node.id) : null;
+    for (const a of dino ? [...wild, dino] : wild) {
+      const frames = kit.frames(a === dino ? 'objects.dino' : 'objects.animal.' + kindOf(a.walker));
+      const sprite = new Sprite(frames[0].texture);
+      sprite.anchor.set(frames[0].anchor[0], frames[0].anchor[1]);
+      sprite.width = TILE_W * frames[0].texture.width * (a === dino ? 0.055 : 0.045); // small: a fox is about half a person wide; the dino is about a person tall
+      sprite.height = sprite.width / frames[0].aspect;
+      v.layer.sortableChildren = true;
+      v.layer.addChild(sprite);
+      this.animals.push({ a, view: v, sprite, frames: frames.map((f) => f.texture) });
+    }
+  }
+
+  /** Walk the animals of every view that is on screen. */
+  private animateAnimals(dt: number): void {
+    if (this.animals.length === 0) return;
+    this.animalClock += dt;
+    for (const an of this.animals) {
+      const shown = an.view.container.visible && an.view.layer.alpha > 0.01;
+      an.sprite.visible = shown;
+      if (!shown) continue;
+      const w = an.a.walker;
+      stepWalker(w, dt, an.a.mask, an.a.cells);
+      const pos = gridToScreen(w.x, w.y);
+      an.sprite.position.set(pos.x, pos.y);
+      an.sprite.zIndex = w.x + w.y + 1;
+      an.sprite.texture = an.frames[walkerFrame(w, this.animalClock)] ?? an.frames[0];
+      const sx = Math.abs(an.sprite.scale.x);
+      an.sprite.scale.x = w.facingRight ? sx : -sx;
     }
   }
 
@@ -732,7 +536,7 @@ export class Renderer {
     }
     return {
       node, depth, grid: this.gridFor(node, depth, allowed), allowed, parent, footprint,
-      f, ox, oy, container, gfx, layer, drawn: false, alpha: 1, childLabels: [], islands: null, pending: [], kids: new Map(), villageTrees: new Map(), houseLabels: [], ownerLayers: new Map(), boatLayer: null,
+      f, ox, oy, container, gfx, layer, drawn: false, alpha: 1, childLabels: [], islands: null, pending: [], kids: new Map(), villageTrees: new Map(), houseLabels: [], ownerLayers: new Map(),
     };
   }
 
@@ -886,6 +690,25 @@ export class Renderer {
   }
 
   /** A standing object placed on the ground at grid position (gx, gy), sized and anchored from its kit entry. */
+  /** Recoloured copies of house art, one per (texture, language): see recolour() in language.ts. Cached. */
+  private recoloured = new Map<Texture, Map<number, Texture>>();
+  private recolouredTexture(tex: Texture, colour: number): Texture {
+    let byColour = this.recoloured.get(tex);
+    if (!byColour) this.recoloured.set(tex, (byColour = new Map()));
+    let out = byColour.get(colour);
+    if (!out) {
+      const src = this.app.renderer.extract.canvas(tex) as HTMLCanvasElement;
+      const ctx = src.getContext('2d')!;
+      const img = ctx.getImageData(0, 0, src.width, src.height);
+      recolourPixels(img.data, colour);
+      ctx.putImageData(img, 0, 0);
+      out = Texture.from(src);
+      out.source.scaleMode = 'nearest';
+      byColour.set(colour, out);
+    }
+    return out;
+  }
+
   private objectSprite(art: Sprite3D, gx: number, gy: number, widthScale = 1, yLift = 0): Sprite {
     const sp = new Sprite(art.texture);
     sp.anchor.set(art.anchor[0], art.anchor[1]);
@@ -1132,6 +955,9 @@ export class Renderer {
         const sp = this.objectSprite(art, p.x, p.y, imageCells / art.widthInTiles, TILE_H * 0.15);
         if (p.hash % 2 === 1) sp.scale.x = -sp.scale.x;
         const name = nameOf.get(p.id);
+        // language colour: this house is drawn in a recoloured copy of the art (the walls take the language's hue, roofs stay as they are)
+        const lang = name ? languageOf(name) : null;
+        if (lang) sp.texture = this.recolouredTexture(art.texture, lang.color);
         if (name) {
           const text = name.length > 20 ? name.slice(0, 19) + '…' : name;
           const label = new Text({
@@ -1238,8 +1064,6 @@ export class Renderer {
 
     smokeLayer.zIndex = 1e6;
     layer.addChild(smokeLayer);
-    this.drawnViews.push(v);
-    this.spawnBoats(v);
     // The repository's own island (the root's loose files) is where the collaborators live: mark where they may walk.
     if (v.depth === 1 && v.node.id.endsWith(LOOSE_FILES_SUFFIX) && v.allowed) {
       const allowed = v.allowed;
@@ -1252,6 +1076,19 @@ export class Renderer {
       v.layer.sortableChildren = true; // people and buildings sort by depth together
       this.homeSpot = { view: v, walkable, cells: walkableCells(walkable) };
       this.spawnPeople();
+    }
+    // Animals live on every other island: walkable land, clear of houses, fires and trees.
+    // Only villages (where the houses are): a cluster's islands are drawn by their own views, which would cover them.
+    if (isVillage(v.node)) {
+      const allowed = v.allowed;
+      const walk = Array.from({ length: GRID_SIZE }, (_, j) =>
+        Array.from({ length: GRID_SIZE }, (_, i) => {
+          const t = grid[j][i];
+          const land = t.type === 'island' || (t.type === 'village' && t.variant !== 2);
+          return land && (!allowed || allowed[j][i]) && !blockedCells.has(j * GRID_SIZE + i);
+        }),
+      );
+      this.spawnAnimals(v, kit, walk, v.depth === 1 && v.node.id.endsWith(LOOSE_FILES_SUFFIX));
     }
     kit.flush();
   }
@@ -1429,11 +1266,6 @@ export class Renderer {
     if (!v.drawn) this.drawView(v);
     v.gfx.alpha = v.alpha;
     v.layer.alpha = v.alpha;
-    if (v.boatLayer) {
-      v.boatLayer.alpha = v.alpha;
-      // child views are added to this container as they appear: keep the boats above them
-      if (v.container.children[v.container.children.length - 1] !== v.boatLayer) v.container.addChild(v.boatLayer);
-    }
     this.updateLabel(v);
     this.updateHouseLabels(v);
     for (const isl of this.islandsOf(v)) {
@@ -1538,7 +1370,7 @@ export class Renderer {
       hit.view.container.addChild(this.highlight);
       diamond(this.highlight, hit.x, hit.y).stroke({ width: 2 / (this.world.scale.x * hit.view.f), color: HIGHLIGHT });
     }
-    this.onHover(hit ? { x: hit.x, y: hit.y, tile: hit.tile } : null);
+    this.onHover(hit ? { x: hit.x, y: hit.y, tile: hit.tile, container: hit.view.node } : null);
   }
 
   /** Breadcrumb follows whichever nested level fills the middle of the screen. */
@@ -1640,8 +1472,12 @@ export class Renderer {
     let dragging = false;
     let lastX = 0;
     let lastY = 0;
+    let downX = 0;
+    let downY = 0;
 
     canvas.addEventListener('pointerdown', (e) => {
+      downX = e.clientX;
+      downY = e.clientY;
       dragging = true;
       lastX = e.clientX;
       lastY = e.clientY;
@@ -1659,8 +1495,11 @@ export class Renderer {
         this.refreshHover();
       }
     });
-    canvas.addEventListener('pointerup', () => {
+    canvas.addEventListener('pointerup', (e) => {
       dragging = false;
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return; // a drag, not a click
+      const hit = this.pick(e.clientX, e.clientY);
+      if (hit) this.onTileClick({ x: hit.x, y: hit.y, tile: hit.tile, container: hit.view.node });
     });
     canvas.addEventListener('pointerleave', () => {
       this.pointer = null;

@@ -764,20 +764,106 @@
       "widthInTiles": 1.0
     }
   ],
-  "objects.boat": [
+  "objects.animal.0": [
     {
-      "file": "objects/boat_0.png",
+      "file": "objects/animal_0_0.png",
       "anchor": [
         0.5,
-        0.8571428571428571
+        0.9
       ],
       "widthInTiles": 1.0
     },
     {
-      "file": "objects/boat_1.png",
+      "file": "objects/animal_0_1.png",
       "anchor": [
         0.5,
-        0.8571428571428571
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/animal_0_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.animal.1": [
+    {
+      "file": "objects/animal_1_0.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/animal_1_1.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/animal_1_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.animal.2": [
+    {
+      "file": "objects/animal_2_0.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/animal_2_1.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/animal_2_2.png",
+      "anchor": [
+        0.5,
+        0.9
+      ],
+      "widthInTiles": 1.0
+    }
+  ],
+  "objects.dino": [
+    {
+      "file": "objects/dino_0.png",
+      "anchor": [
+        0.5,
+        0.95
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/dino_1.png",
+      "anchor": [
+        0.5,
+        0.95
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/dino_2.png",
+      "anchor": [
+        0.5,
+        0.95
       ],
       "widthInTiles": 1.0
     }

@@ -29,7 +29,7 @@ const ROOT: Params = { ring: 2, sep: 3, landFraction: 0.8 };
 const SUB: Params = { ring: 1, sep: 1, landFraction: 0.5 };
 
 /** The root's own island counts for at least this fraction of the weight of its biggest neighbour. */
-export const HOME_SHARE = 0.6;
+export const HOME_SHARE = 1.8;
 
 /** Houses in a village sit close together. */
 const VILLAGE_GAP = 1;

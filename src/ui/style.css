@@ -24,11 +24,15 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b2a4a; fon
   background: rgba(10, 20, 35, 0.8); border-radius: 6px; font-size: 13px; line-height: 1.5;
 }
 #inspect .dim { opacity: 0.6; }
-#pizza {
-  position: absolute; bottom: 12px; right: 12px; padding: 8px 14px;
-  background: rgba(10, 20, 35, 0.8); border-radius: 6px; font: 600 15px system-ui, sans-serif;
-  font-variant-numeric: tabular-nums;
+#legend {
+  position: absolute; bottom: 12px; right: 12px; padding: 6px 10px; max-width: 170px;
+  background: rgba(10, 20, 35, 0.8); border-radius: 6px; font-size: 12px; line-height: 1.6;
 }
+#legend:empty { display: none; }
+#legend .row { display: flex; align-items: center; gap: 6px; }
+#legend .dot { width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(255, 255, 255, 0.5); flex: none; }
+#legend .none { opacity: 0.45; }
+#legend .n { margin-left: auto; opacity: 0.6; }
 
 #gh-form { display: flex; gap: 4px; align-items: stretch; pointer-events: auto; }
 #gh-form input, #gh-form button {
@@ -66,3 +70,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b2a4a; fon
 #settings-panel .row button { font-size: 13px; padding: 4px 10px; }
 #settings-panel p { margin: 8px 0 0; }
 #settings .dim { opacity: 0.6; font-weight: 400; }
+
+/* The token is masked like a password without being a password field, so browsers do not offer to save a login. */
+#gh-token.secret { -webkit-text-security: disc; }

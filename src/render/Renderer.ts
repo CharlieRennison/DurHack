@@ -54,10 +54,8 @@ interface View {
   layer: Container;
   drawn: boolean;
   alpha: number;
-  /** Name label anchored at the island's centroid; kept at constant screen size. */
-  label: Text | null;
-  /** Label size in screen pixels (it is kept at constant screen size). */
-  labelSize: { w: number; h: number } | null;
+  /** Names of the islands inside this view, anchored at each island's middle and kept at constant screen size. */
+  childLabels: IslandLabel[];
   islands: Island[] | null;
   /** Files shown here that have no children yet (live mode may still load their functions). */
   pending: Island[];
@@ -85,6 +83,15 @@ interface HouseLabel {
   size: { w: number; h: number };
   /** Taller (more code) wins when labels overlap. */
   rank: number;
+}
+
+/** An island's name, drawn by the view that contains the island (so it exists as soon as the island is on screen). */
+interface IslandLabel {
+  label: Text;
+  size: { w: number; h: number };
+  /** The island's cumulative scale (its footprint size in root world units / one root grid) and depth. */
+  f: number;
+  depth: number;
 }
 
 interface Cell {
@@ -156,7 +163,7 @@ export class Renderer {
   private homeCentre = { x: 0, y: 0 };
   private pointer: { x: number; y: number } | null = null;
   private hover: { view: View; x: number; y: number } | null = null;
-  private labelViews: View[] = [];
+  private islandLabels: IslandLabel[] = [];
   /** Which files import which, and the boats that show it: one sea lane per pair of linked islands in a view. */
   private imports: ImportEdge[] = [];
   private drawnViews: View[] = [];
@@ -227,7 +234,7 @@ export class Renderer {
     this.chainKey = ''; // a new root must refresh the breadcrumb even if its id ("root") is unchanged
     this.world.removeChildren().forEach((c) => c.destroy({ children: true }));
     this.labels = new Container();
-    this.labelViews = [];
+    this.islandLabels = [];
     this.houseLabels = [];
     this.marker = null;
     this.flyStep = null;
@@ -725,7 +732,7 @@ export class Renderer {
     }
     return {
       node, depth, grid: this.gridFor(node, depth, allowed), allowed, parent, footprint,
-      f, ox, oy, container, gfx, layer, drawn: false, alpha: 1, label: null, labelSize: null, islands: null, pending: [], kids: new Map(), villageTrees: new Map(), houseLabels: [], ownerLayers: new Map(), boatLayer: null,
+      f, ox, oy, container, gfx, layer, drawn: false, alpha: 1, childLabels: [], islands: null, pending: [], kids: new Map(), villageTrees: new Map(), houseLabels: [], ownerLayers: new Map(), boatLayer: null,
     };
   }
 
@@ -834,27 +841,43 @@ export class Renderer {
 
   private drawView(v: View): void {
     v.drawn = true;
-    const { cells, cx, cy } = this.viewCells(v);
+    const { cells } = this.viewCells(v);
     if (this.kit) this.drawTextured(v, this.kit, cells);
     else this.drawFlat(v, cells);
 
-    // A folder's home islet (its loose files) has no label: the cluster's label already names it.
-    if (v.footprint && cells.length > 0 && !v.node.id.endsWith(LOOSE_FILES_SUFFIX)) {
+    // Name every island inside this view. The labels belong to the container, not to the islands' own views, so an
+    // island is named as soon as it is on screen: its own view only exists once you have zoomed close, and deep islands
+    // would otherwise go unnamed. A folder's home islet (its loose files) has no label: the cluster's label names it.
+    for (const isl of this.islandsOf(v)) {
+      if (isl.child.id.endsWith(LOOSE_FILES_SUFFIX)) continue;
+      let sx = 0;
+      let sy = 0;
+      let n = 0;
+      v.grid.forEach((row, j) => row.forEach((t, i) => {
+        if (t.nodeId === isl.child.id) {
+          sx += i + 0.5;
+          sy += j + 0.5;
+          n++;
+        }
+      }));
+      if (n === 0) continue;
       const label = new Text({
-        text: v.node.name,
+        text: isl.child.name,
         style: { fontSize: 14, fontWeight: '700', fill: 0xffffff, stroke: { color: 0x10233a, width: 4 } },
         resolution: 2,
       });
       label.anchor.set(0.5);
-      // Position in root world units (the view's origin and scale), not in the masked view's own space.
-      const p = gridToScreen(cx, cy);
+      // position in root world units (this view's origin and scale)
+      const p = gridToScreen(sx / n, sy / n);
       label.position.set(v.ox + v.f * p.x, v.oy + v.f * p.y);
+      label.visible = false;
       this.labels.addChild(label);
-      v.label = label;
-      v.labelSize = { w: label.width, h: label.height };
-      this.labelViews.push(v);
+      const il: IslandLabel = { label, size: { w: label.width, h: label.height }, f: v.f * isl.footprint.s, depth: v.depth + 1 };
+      v.childLabels.push(il);
+      this.islandLabels.push(il);
     }
   }
+
 
   /** Placeholder look: flat-coloured diamonds. Used when the tile art could not be loaded. */
   private drawFlat(v: View, cells: Cell[]): void {
@@ -1326,13 +1349,21 @@ export class Renderer {
 
   /** A label shows with its level and hands over to the next level's labels as you zoom further. */
   private updateLabel(v: View): void {
-    if (!v.label) return;
-    // Legibility only depends on how big the island is on screen and whether the next level has taken
-    // over; it must not inherit the tile fade, or names ghost out when zoomed out.
-    const r = (this.world.scale.x * v.f) / this.fit;
-    v.label.alpha = clamp01((r - 0.1) / 0.1) * (1 - this.depthT(v.depth + 1));
-    v.label.visible = v.container.visible && v.label.alpha > 0.01;
-    v.label.scale.set(1 / this.world.scale.x);
+    // An island's name shows while the island is a sensible size on screen: from when it is a few dozen pixels across
+    // until its footprint fills the screen, when the names of the islands inside it take over. (Judging by size, not
+    // by zoom thresholds, keeps deep islands named: they are small at the zoom where they appear.)
+    const sc = this.world.scale.x;
+    // and the names of the islands inside a cluster wait until the cluster itself nearly fills the screen (its own name
+    // has handed over by then), so zoomed out you read the clusters, not a scatter of small islands
+    const open = v.depth === 0 ? 1 : clamp01((sc * v.f / this.fit - 0.85) / 0.3);
+    const fade = clamp01(v.alpha * 2.5) * open;
+    for (const il of v.childLabels) {
+      const r = (sc * il.f) / this.fit;
+      const a = clamp01((r - 0.05) / 0.05) * (1 - clamp01((r - 1.1) / 0.5)) * fade;
+      il.label.alpha = a;
+      il.label.visible = v.container.visible && a > 0.01;
+      il.label.scale.set(1 / sc);
+    }
   }
 
   /** House names appear once the village fills a good part of the screen, and follow its fade. */
@@ -1375,8 +1406,8 @@ export class Renderer {
     const sc = this.world.scale.x;
     const shown: { x0: number; y0: number; x1: number; y1: number }[] = [];
     const items: { text: Text; w: number; h: number; rank: number }[] = [];
-    for (const v of this.labelViews) {
-      if (v.label?.visible && v.labelSize) items.push({ text: v.label, w: v.labelSize.w, h: v.labelSize.h, rank: 1000 + v.f - v.depth * 1e-3 });
+    for (const il of this.islandLabels) {
+      if (il.label.visible) items.push({ text: il.label, w: il.size.w, h: il.size.h, rank: 1000 + il.f - il.depth * 1e-3 });
     }
     for (const h of this.houseLabels) {
       if (h.label.visible) items.push({ text: h.label, w: h.size.w, h: h.size.h, rank: h.rank });
@@ -1456,7 +1487,7 @@ export class Renderer {
   /** Hide a view, its descendants and their labels. */
   private hideView(v: View): void {
     v.container.visible = false;
-    if (v.label) v.label.visible = false;
+    for (const il of v.childLabels) il.label.visible = false;
     for (const h of v.houseLabels) h.label.visible = false;
     for (const k of v.kids.values()) this.hideView(k);
   }

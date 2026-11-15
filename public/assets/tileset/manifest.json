@@ -885,5 +885,31 @@
       ],
       "widthInTiles": 1.0
     }
+  ],
+  "objects.nessie": [
+    {
+      "file": "objects/nessie_0.png",
+      "anchor": [
+        0.5,
+        0.85
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/nessie_1.png",
+      "anchor": [
+        0.5,
+        0.85
+      ],
+      "widthInTiles": 1.0
+    },
+    {
+      "file": "objects/nessie_2.png",
+      "anchor": [
+        0.5,
+        0.85
+      ],
+      "widthInTiles": 1.0
+    }
   ]
 }

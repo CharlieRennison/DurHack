@@ -176,7 +176,7 @@ export class Renderer {
   private hoveredPerson = -1;
   private peopleClock = 0;
   /** Animals wandering the islands (one or two per island), in the layer of the view they live in. */
-  private animals: { a: Animal; view: View; sprite: Sprite; frames: Texture[]; boat?: boolean }[] = [];
+  private animals: { a: Animal; view: View; sprite: Sprite; frames: Texture[]; boat?: boolean; nessie?: boolean }[] = [];
   private animalClock = 0;
   /** Seagulls flying across the foreground (null until the tile art is loaded). */
   private gulls: Gulls | null = null;
@@ -394,6 +394,32 @@ export class Renderer {
       v.layer.addChild(sprite);
       this.animals.push({ a, view: v, sprite, frames: frames.map((f) => f.texture), boat: true });
     }
+    // The Loch Ness monster: one, very slow, bobbing along and now and then diving out of sight. It lives in the
+    // water around the root island (the home islet), starts somewhere different on every load, and stays in that part of the sea.
+    if (!kit.hasArt('objects.nessie')) return;
+    const nf = kit.frames('objects.nessie');
+    let hx = 0;
+    let hy = 0;
+    let hn = 0;
+    v.grid.forEach((row, y) => row.forEach((t, x) => {
+      if (t.type !== 'ocean' && t.nodeId?.endsWith(LOOSE_FILES_SUFFIX)) {
+        hx += x + 0.5;
+        hy += y + 0.5;
+        hn++;
+      }
+    }));
+    const around = hn > 0 ? water.map((row, y) => row.map((ok, x) => ok && Math.hypot(x + 0.5 - hx / hn, y + 0.5 - hy / hn) <= 18)) : water;
+    // a time-based seed on purpose: it is only decoration, so it may differ from load to load (the map itself never does)
+    for (const a of makeBoats(around, `${v.node.id}#nessie#${Date.now()}`, 1)) {
+      a.walker.speed *= 0.5;
+      const sprite = new Sprite(nf[0].texture);
+      sprite.anchor.set(nf[0].anchor[0], nf[0].anchor[1]);
+      sprite.width = TILE_W * 0.65;
+      sprite.height = sprite.width / nf[0].aspect;
+      v.layer.sortableChildren = true;
+      v.layer.addChild(sprite);
+      this.animals.push({ a, view: v, sprite, frames: nf.map((f) => f.texture), boat: true, nessie: true });
+    }
   }
 
   /** Walk the animals of every view that is on screen. */
@@ -413,6 +439,11 @@ export class Renderer {
       an.sprite.texture = an.boat ? an.frames[Math.floor(this.animalClock * 2 + w.phase * 2) % an.frames.length] : an.frames[walkerFrame(w, this.animalClock)] ?? an.frames[0];
       const sx = Math.abs(an.sprite.scale.x);
       an.sprite.scale.x = w.facingRight ? sx : -sx;
+      if (an.nessie) {
+        // surfaced for 28 s, then dives for about 6 s (fading out and back in) and comes up somewhere else along its way
+        const t = (this.animalClock + w.phase * 36) % 36;
+        an.sprite.alpha = t < 28 ? 1 : t < 30 ? (30 - t) / 2 : t < 34 ? 0 : (t - 34) / 2;
+      }
     }
   }
 

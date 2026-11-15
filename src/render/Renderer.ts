@@ -168,6 +168,11 @@ export class Renderer {
   private boatLabel: Text | null = null;
   private hoveredBoat = -1;
   private boatClock = 0;
+  /** The camera flight in progress (a new one replaces it), and the ring that marks a searched-for file for a while. */
+  private flyStep: (() => void) | null = null;
+  private marker: { view: View; x: number; y: number; name: string; born: number } | null = null;
+  private markerGfx: Graphics | null = null;
+  private markerLabel: Text | null = null;
   /** Collaborators' names, and the little people who walk the root island for them. */
   private collaborators: string[] = [];
   private homeSpot: { view: View; walkable: boolean[][]; cells: [number, number][] } | null = null;
@@ -205,6 +210,7 @@ export class Renderer {
     this.app.ticker.add(() => this.gulls?.update(this.app.ticker.deltaMS / 1000));
     this.app.ticker.add(() => this.animatePeople(Math.min(this.app.ticker.deltaMS / 1000, 0.1)));
     this.app.ticker.add(() => this.animateBoats(Math.min(this.app.ticker.deltaMS / 1000, 0.1)));
+    this.app.ticker.add(() => this.animateMarker());
     try {
       this.kit = await loadTileKit();
       this.gulls = new Gulls(this.kit.frames('objects.seagull').map((f) => f.texture), () => ({ w: this.app.screen.width, h: this.app.screen.height, x: this.world.position.x, y: this.world.position.y, scale: this.world.scale.x, ref: this.fit * 3 }));
@@ -223,6 +229,8 @@ export class Renderer {
     this.labels = new Container();
     this.labelViews = [];
     this.houseLabels = [];
+    this.marker = null;
+    this.flyStep = null;
     this.people = [];
     this.collaborators = []; // the new repo's names arrive with setCollaborators
     this.imports = []; // and its import links with setImports
@@ -239,6 +247,99 @@ export class Renderer {
     this.world.addChild(this.root.container, this.labels);
     this.fitCamera();
     this.refresh();
+  }
+
+  /**
+   * Fly to a search result. `chain` is the island ids to go through from the root (as in focusPath); the camera lands on
+   * the last island that exists. With `target` (a file id) it zooms on that file's house in the village and rings it for
+   * a few seconds, with its name floating above.
+   */
+  focusNode(chain: string[], target?: string, name = ''): void {
+    let v = this.root;
+    if (!v) return;
+    for (const id of chain) {
+      const isl = this.islandsOf(v).find((i) => i.child.id === id);
+      if (!isl) break;
+      let kid = v.kids.get(id);
+      if (!kid) {
+        kid = this.makeView(isl.child, v.depth + 1, v, isl.footprint);
+        v.kids.set(id, kid);
+      }
+      v = kid;
+    }
+    const spot = target ? this.houseCentre(v, target) : null;
+    if (!target || !spot) {
+      this.marker = null;
+      this.flyToView(v);
+      return;
+    }
+    const p = gridToScreen(spot.x, spot.y);
+    const wx = v.ox + v.f * p.x;
+    const wy = v.oy + v.f * p.y;
+    const scale = Math.min(MAX_SCALE, (this.fit / v.f) * 2.4);
+    this.flyTo(scale, this.app.screen.width / 2 - scale * wx, this.app.screen.height / 2 - scale * (wy - v.f * TILE_H * 0.4));
+    this.marker = { view: v, x: p.x, y: p.y, name, born: performance.now() };
+  }
+
+  /** The middle of a file's house patch in a village view, in cell coordinates (null if it has none). */
+  private houseCentre(v: View, fileId: string): { x: number; y: number } | null {
+    let sx = 0;
+    let sy = 0;
+    let n = 0;
+    v.grid.forEach((row, j) => row.forEach((t, i) => {
+      if (t.type === 'house' && t.nodeId === fileId) {
+        sx += i + 0.5;
+        sy += j + 0.5;
+        n++;
+      }
+    }));
+    return n ? { x: sx / n, y: sy / n } : null;
+  }
+
+  /** Two expanding rings and the file's name on the house the search flew to, fading out after a few seconds. */
+  private animateMarker(): void {
+    const m = this.marker;
+    if (!m) {
+      if (this.markerGfx) this.markerGfx.visible = false;
+      if (this.markerLabel) this.markerLabel.visible = false;
+      return;
+    }
+    const age = (performance.now() - m.born) / 1000;
+    const life = 7;
+    if (age > life) {
+      this.marker = null;
+      return;
+    }
+    if (!this.markerGfx) {
+      this.markerGfx = new Graphics();
+      this.markerLabel = new Text({
+        text: '',
+        style: { fontSize: 15, fontWeight: '700', fill: 0xfff3a0, stroke: { color: 0x10233a, width: 5 } },
+        resolution: 2,
+      });
+      this.markerLabel.anchor.set(0.5, 1);
+      this.labels.addChild(this.markerGfx, this.markerLabel);
+    }
+    const g = this.markerGfx;
+    const l = this.markerLabel!;
+    const v = m.view;
+    const sc = this.world.scale.x;
+    const wx = v.ox + v.f * m.x;
+    const wy = v.oy + v.f * m.y;
+    const fade = age < life - 1.5 ? 1 : (life - age) / 1.5;
+    g.visible = true;
+    g.clear();
+    for (let k = 0; k < 2; k++) {
+      const ph = ((age * 0.8 + k * 0.5) % 1 + 1) % 1; // two rings, half a cycle apart
+      const radius = (14 + ph * 38) / sc; // constant on screen whatever the zoom
+      g.circle(wx, wy, radius).stroke({ width: 2.5 / sc, color: 0xfff3a0, alpha: (1 - ph) * 0.9 * fade });
+    }
+    g.circle(wx, wy, 5 / sc).fill({ color: 0xfff3a0, alpha: 0.9 * fade });
+    if (l.text !== m.name) l.text = m.name;
+    l.visible = true;
+    l.alpha = fade;
+    l.scale.set(1 / sc);
+    l.position.set(wx, wy - 30 / sc);
   }
 
   /** Which files import which (edges by file path): boats sail between the islands that are linked. */
@@ -1473,19 +1574,25 @@ export class Renderer {
       this.refresh();
       return;
     }
+    if (this.flyStep) this.app.ticker.remove(this.flyStep); // a new flight replaces the one in progress
     const s0 = this.world.scale.x;
     const x0 = this.world.position.x;
     const y0 = this.world.position.y;
     const t0 = performance.now();
-    const dur = 1500;
+    // farther trips take a little longer
+    const dur = 1200 + 500 * Math.min(2, Math.abs(Math.log(scale / s0)) / Math.LN2 / 3);
     const step = () => {
       const t = clamp01((performance.now() - t0) / dur);
       const e = t * t * (3 - 2 * t);
       this.world.scale.set(Math.exp(Math.log(s0) + (Math.log(scale) - Math.log(s0)) * e));
       this.world.position.set(x0 + (px - x0) * e, y0 + (py - y0) * e);
       this.refresh();
-      if (t >= 1) this.app.ticker.remove(step);
+      if (t >= 1) {
+        this.app.ticker.remove(step);
+        if (this.flyStep === step) this.flyStep = null;
+      }
     };
+    this.flyStep = step;
     this.app.ticker.add(step);
   }
 

@@ -28,6 +28,9 @@ export interface Tile {
   height: number;
   /** A tile with nodeId is zoomable into that node. */
   nodeId?: string;
+  // Territories: an 'ocean' tile that has a nodeId is that child's territory water (the shallow ring round its
+  // islet, or the reef water of a coral). It is zoomable into that node like any other tile with a nodeId.
+  // On ocean tiles `variant` means depth: 0 = deep, 1 = shallow (inside a cluster), 2 = reef.
 }
 
 /** layout -> render. Indexed grid[y][x]. */

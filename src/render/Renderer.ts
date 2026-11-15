@@ -1,10 +1,9 @@
 import { Application, Container, Graphics, Matrix, Sprite, Text, TilingSprite, type Texture } from 'pixi.js';
 import { GRID_SIZE, type Grid, type RepoNode, type Tile } from '../types';
-import { neighbors } from '../grid';
-import { effectiveChildren, isVillage } from '../layout/children';
+import { effectiveChildren, forgetNode, isVillage, LOOSE_FILES_SUFFIX } from '../layout/children';
 import { gridToScreen, screenToCell, TILE_H, TILE_W } from './iso';
-import { CORAL_BORDER, HIGHLIGHT, LAGOON, PALETTE } from './palette';
-import { Edge, loadTileKit, type TileKit } from './tiles';
+import { HIGHLIGHT, PALETTE, WATER } from './palette';
+import { Edge, loadTileKit, type Sprite3D, type TileKit } from './tiles';
 
 export interface HoverInfo {
   x: number;
@@ -46,14 +45,24 @@ interface View {
   gfx: Graphics;
   /** Textured tiles and sprites (used instead of gfx when the tile art loaded). */
   layer: Container;
-  /** Soft pink band under a coral's border art; only needed when zoomed out, so it fades away. */
-  rim: Graphics | null;
   drawn: boolean;
   alpha: number;
   /** Name label anchored at the island's centroid; kept at constant screen size. */
   label: Text | null;
+  /** Label size in screen pixels (it is kept at constant screen size). */
+  labelSize: { w: number; h: number } | null;
   islands: Island[] | null;
+  /** Files shown here that have no children yet (live mode may still load their functions). */
+  pending: Island[];
   kids: Map<string, View>;
+}
+
+interface Cell {
+  i: number;
+  j: number;
+  type: Tile['type'];
+  /** Water depth for ocean cells (0 deep, 1 shallow, 2 reef); reef for coral. */
+  variant: number;
 }
 
 const MIN_SCALE = 0.15;
@@ -114,18 +123,25 @@ export class Renderer {
   private homeCentre = { x: 0, y: 0 };
   private pointer: { x: number; y: number } | null = null;
   private hover: { view: View; x: number; y: number } | null = null;
+  private labelViews: View[] = [];
   private chain: View[] = [];
   private chainKey = '';
-  /** Tile art; null if it failed to load, in which case flat-colour tiles are drawn. */
+  /** Tile kit (manifest art with code-drawn placeholders); null only if it failed to build, then flat colours are drawn. */
   private kit: TileKit | null = null;
 
   onHover: (info: HoverInfo | null) => void = () => {};
   /** Called with the node stack (root first) whenever the current level changes. */
   onLevelChange: (nodes: RepoNode[]) => void = () => {};
+  /**
+   * Optional lazy loader: called once per visible childless file node. Resolve true after filling `node.children`
+   * (the file then becomes zoomable); false when there is nothing to load. Must not throw.
+   */
+  loadChildren?: (node: RepoNode) => Promise<boolean>;
+  private requested = new Set<string>();
 
   async init(host: HTMLElement): Promise<void> {
     // Ocean-coloured background: the sea extends infinitely beyond the root grid.
-    await this.app.init({ resizeTo: host, background: PALETTE.ocean, antialias: true });
+    await this.app.init({ resizeTo: host, background: WATER[0], antialias: true });
     host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.world);
     this.bindInput(this.app.canvas);
@@ -139,9 +155,11 @@ export class Renderer {
   setRoot(root: RepoNode, layout: Layout): void {
     this.layout = layout;
     this.gridCache.clear();
+    this.requested.clear();
     this.chainKey = ''; // a new root must refresh the breadcrumb even if its id ("root") is unchanged
     this.world.removeChildren().forEach((c) => c.destroy({ children: true }));
     this.labels = new Container();
+    this.labelViews = [];
     this.root = this.makeView(root, 0, undefined, undefined);
     this.world.addChild(this.root.container, this.labels);
     this.fitCamera();
@@ -226,16 +244,17 @@ export class Renderer {
     }
     return {
       node, depth, grid: this.gridFor(node, depth, allowed), allowed, parent, footprint,
-      f, ox, oy, container, gfx, layer, rim: null, drawn: false, alpha: 1, label: null, islands: null, kids: new Map(),
+      f, ox, oy, container, gfx, layer, drawn: false, alpha: 1, label: null, labelSize: null, islands: null, pending: [], kids: new Map(),
     };
   }
 
   /**
-   * Child-grid cells where sub-islands may sit: the interior of this island on the parent grid
-   * (its coast ring stays as a shoreline margin). Thin islands fall back to their full footprint.
+   * Child-grid cells the child may use: every cell that maps onto this child's territory on the parent grid (its
+   * islet and the shallow ring round it). A village keeps to its islet's land, so its houses never stand in water.
    */
   private allowedFor(parent: View, fp: Footprint, node: RepoNode): boolean[][] {
-    const build = (margin: number) => {
+    const village = isVillage(node);
+    const build = (landOnly: 'inland' | 'land' | false) => {
       let count = 0;
       const a = Array.from({ length: GRID_SIZE }, (_, j) =>
         Array.from({ length: GRID_SIZE }, (_, i) => {
@@ -243,24 +262,17 @@ export class Renderer {
           const cy = Math.floor(fp.by + (j + 0.5) * fp.s);
           if (cx < 0 || cy < 0 || cx >= GRID_SIZE || cy >= GRID_SIZE) return false;
           const t = parent.grid[cy][cx];
-          let yes = t.nodeId === node.id && (margin === 0 || t.type !== 'coast');
-          if (yes && margin === 2) {
-            yes = neighbors(cx, cy).every(([nx, ny]) => {
-              const n = parent.grid[ny][nx];
-              return n.nodeId === node.id && n.type !== 'coast';
-            });
-          }
+          const yes = t.nodeId === node.id && (!landOnly || (t.type !== 'ocean' && (landOnly === 'land' || t.type !== 'coast')));
           if (yes) count++;
           return yes;
         }),
       );
       return { a, count };
     };
-    // Prefer a thick (2-cell) shoreline, then a thin one, then the whole footprint.
-    const thick = build(2);
-    if (thick.count >= 60) return thick.a;
-    const thin = build(1);
-    return thin.count >= 60 ? thin.a : build(0).a;
+    if (!village) return build(false).a;
+    // Houses keep off the shoreline when the islet is big enough.
+    const inland = build('inland');
+    return inland.count >= 40 ? inland.a : build('land').a;
   }
 
   private islandsOf(v: View): Island[] {
@@ -281,34 +293,37 @@ export class Renderer {
       }
     }
     v.islands = [];
+    v.pending = [];
     for (const child of effectiveChildren(v.node)) {
       const b = bounds.get(child.id);
-      if (!b || child.children.length === 0) continue;
+      if (!b) continue;
       const w = b.x1 - b.x0 + 1;
       const h = b.y1 - b.y0 + 1;
       const side = Math.max(w, h);
-      v.islands.push({
+      const island = {
         child,
         footprint: { bx: b.x0 + w / 2 - side / 2, by: b.y0 + h / 2 - side / 2, s: side / GRID_SIZE },
-      });
+      };
+      if (child.children.length > 0) v.islands.push(island);
+      else if (child.kind === 'file' && this.loadChildren) v.pending.push(island);
     }
     return v.islands;
   }
 
   /**
    * The cells of a view that get drawn, back to front. In a child view only cells inside its island's
-   * silhouette count; its ocean cells are either lake water ("lagoon"), the coral's own water, or skipped
-   * so the parent's land shows through.
+   * silhouette (its territory) count. Its own water is drawn over the territory; a village's water is skipped so the
+   * parent's islet shows through.
    */
   private viewCells(v: View): {
-    cells: { i: number; j: number; type: Tile['type']; water: 'lagoon' | 'coral' | null }[];
+    cells: Cell[];
     cx: number;
     cy: number;
   } {
     const fp = v.footprint;
     const parentGrid = v.parent?.grid;
     const village = isVillage(v.node);
-    const cells: { i: number; j: number; type: Tile['type']; water: 'lagoon' | 'coral' | null }[] = [];
+    const cells: Cell[] = [];
     let sumX = 0;
     let sumY = 0;
     let count = 0;
@@ -317,6 +332,7 @@ export class Renderer {
       for (let i = Math.max(0, sum - (GRID_SIZE - 1)); i <= Math.min(GRID_SIZE - 1, sum); i++) {
         const j = sum - i;
         const type = v.grid[j][i].type;
+        const variant = type === 'coral' ? 2 : v.grid[j][i].variant;
         if (fp && parentGrid) {
           const cx = Math.floor(fp.bx + (i + 0.5) * fp.s);
           const cy = Math.floor(fp.by + (j + 0.5) * fp.s);
@@ -325,13 +341,10 @@ export class Renderer {
           sumX += i + 0.5;
           sumY += j + 0.5;
           count++;
-          if (type === 'ocean') {
-            if (village || !v.allowed?.[j][i]) continue;
-            cells.push({ i, j, type, water: parentGrid[cy][cx].type === 'coral' ? 'coral' : 'lagoon' });
-            continue;
-          }
-        }
-        cells.push({ i, j, type, water: null });
+          // A village sits on its parent's islet: its own water (the ring round the islet) is not redrawn.
+          if (type === 'ocean' && village) continue;
+        } else if (type === 'ocean' && variant === 0) continue; // the deep sea is the background
+        cells.push({ i, j, type, variant });
       }
     }
     return { cells, cx: count ? sumX / count : 0, cy: count ? sumY / count : 0 };
@@ -343,7 +356,8 @@ export class Renderer {
     if (this.kit) this.drawTextured(v, this.kit, cells);
     else this.drawFlat(v, cells);
 
-    if (v.footprint && cells.length > 0) {
+    // A folder's home islet (its loose files) has no label: the cluster's label already names it.
+    if (v.footprint && cells.length > 0 && !v.node.id.endsWith(LOOSE_FILES_SUFFIX)) {
       const label = new Text({
         text: v.node.name,
         style: { fontSize: 14, fontWeight: '700', fill: 0xffffff, stroke: { color: 0x10233a, width: 4 } },
@@ -355,56 +369,68 @@ export class Renderer {
       label.position.set(v.ox + v.f * p.x, v.oy + v.f * p.y);
       this.labels.addChild(label);
       v.label = label;
+      v.labelSize = { w: label.width, h: label.height };
+      this.labelViews.push(v);
     }
   }
 
   /** Placeholder look: flat-coloured diamonds. Used when the tile art could not be loaded. */
-  private drawFlat(
-    v: View,
-    cells: { i: number; j: number; type: Tile['type']; water: 'lagoon' | 'coral' | null }[],
-  ): void {
+  private drawFlat(v: View, cells: Cell[]): void {
     const g = v.gfx;
-    for (const { i, j, type, water } of cells) {
-      if (water) diamond(g, i, j).fill(water === 'coral' ? PALETTE.coral : LAGOON);
-      else diamond(g, i, j).fill(type === 'coral' && this.isEdgeOfRegion(v.grid, i, j) ? CORAL_BORDER : PALETTE[type]);
-    }
+    for (const { i, j, type, variant } of cells) diamond(g, i, j).fill(type === 'ocean' ? WATER[variant] ?? WATER[0] : PALETTE[type]);
   }
 
-  /** Real art: ground tile variants with blended shores, tiling water, coral borders, huts and trees. */
-  private drawTextured(
-    v: View,
-    kit: TileKit,
-    cells: { i: number; j: number; type: Tile['type']; water: 'lagoon' | 'coral' | null }[],
-  ): void {
+  /** A standing object placed on the ground at grid position (gx, gy), sized and anchored from its kit entry. */
+  private objectSprite(art: Sprite3D, gx: number, gy: number, widthScale = 1, yLift = 0): Sprite {
+    const sp = new Sprite(art.texture);
+    sp.anchor.set(art.anchor[0], art.anchor[1]);
+    sp.width = TILE_W * art.widthInTiles * widthScale;
+    sp.height = sp.width / art.aspect;
+    const p = gridToScreen(gx, gy);
+    sp.position.set(p.x, p.y + yLift);
+    return sp;
+  }
+
+  /** Kit art: ground tiles, tiling water, reef coral, houses and trees (placeholders until real art exists). */
+  private drawTextured(v: View, kit: TileKit, cells: Cell[]): void {
     const layer = v.layer;
     const grid = v.grid;
 
-    // --- water: the open sea at the root; inside an island, the lake that holds its sub-folders ---
-    if (!v.footprint) {
-      layer.addChild(this.waterSheet(kit.water, -200, -200, 700));
-    } else {
-      const lagoon = cells.filter((c) => c.water === 'lagoon');
-      if (lagoon.length > 0) {
-        const mask = new Graphics();
-        for (const c of lagoon) diamond(mask, c.i, c.j).fill(0xffffff);
-        const sheet = this.waterSheet(kit.water, 0, 0, GRID_SIZE);
-        layer.addChild(sheet, mask);
-        sheet.mask = mask;
-      }
+    // --- water: the deep sea at the root, then shallow and reef water over the cells that have it ---
+    if (!v.footprint) layer.addChild(this.waterSheet(kit.water(0), -200, -200, 700, kit.waterCells(0)));
+    // A child view fills its whole grid with water; the view's mask then trims it to exactly its territory on the
+    // parent. Without this, gaps along the territory's stair-stepped edge (the child's cells are smaller and do not
+    // line up with the parent's) let the parent's own water show through as thin slivers.
+    else if (!isVillage(v.node)) layer.addChild(this.waterSheet(kit.water(1), 0, 0, GRID_SIZE, kit.waterCells(1)));
+    for (const depth of [1, 2] as const) {
+      const wet = cells.filter((c) => (c.type === 'ocean' || c.type === 'coral') && c.variant === depth);
+      if (wet.length === 0) continue;
+      const mask = new Graphics();
+      for (const c of wet) diamond(mask, c.i, c.j).fill(0xffffff);
+      const sheet = this.waterSheet(kit.water(depth), 0, 0, GRID_SIZE, kit.waterCells(depth));
+      layer.addChild(sheet, mask);
+      sheet.mask = mask;
     }
 
-    // A soft pink band under the coral art: the art alone is a sparse scatter that disappears when small.
-    const rim = new Graphics();
-    layer.addChild(rim);
-    v.rim = rim;
-
-    // --- ground, coral borders; collect hut and tree decorations to draw after (sorted) ---
-    const decor: { gx: number; gy: number; sprite: Sprite }[] = [];
+    // --- ground; collect standing objects to draw after (sorted back to front) ---
+    const decor: { gx: number; gy: number; sprite: Sprite; shadow?: Sprite }[] = [];
     const houses = new Map<string, { sx: number; sy: number; n: number }>();
+    const isWater = (x: number, y: number) =>
+      x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE || grid[y][x].type === 'ocean' || grid[y][x].type === 'coral';
+    const hasShoreArt = !!kit.shore('shore.sand', 0);
+    /** Grass with water only diagonally next to it: drawn as an inner-corner shore tile (sand), if the art exists. */
+    const innerCorner = (x: number, y: number): string | null => {
+      if (!hasShoreArt || isWater(x + 1, y) || isWater(x - 1, y) || isWater(x, y + 1) || isWater(x, y - 1)) return null;
+      if (isWater(x - 1, y - 1)) return 'nw';
+      if (isWater(x + 1, y - 1)) return 'ne';
+      if (isWater(x + 1, y + 1)) return 'se';
+      if (isWater(x - 1, y + 1)) return 'sw';
+      return null;
+    };
     const classOf = (x: number, y: number): 'grass' | 'sand' | 'water' | 'none' => {
       if (x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE) return 'water';
       switch (grid[y][x].type) {
-        case 'island': case 'village': case 'tree': return 'grass';
+        case 'island': case 'village': case 'tree': return innerCorner(x, y) ? 'sand' : 'grass';
         case 'coast': case 'port': return 'sand';
         case 'house': return 'none';
         default: return 'water'; // ocean and coral interiors are open water
@@ -415,11 +441,7 @@ export class Renderer {
 
     // The middle of a village island belongs to the village: keep trees and rocks out of it.
     const villageCore = new Map<string, { x: number; y: number; r: number }>();
-    // An island that holds sub-folders gets a lake over its middle (drawn by its own view, translucent while it
-    // fades in), so trees underneath would ghost through it: such islands get no trees at this level.
-    const lakeIslands = new Set<string>();
     for (const isl of this.islandsOf(v)) {
-      if (!isVillage(isl.child)) lakeIslands.add(isl.child.id);
       if (!isVillage(isl.child)) continue;
       const half = (isl.footprint.s * GRID_SIZE) / 2;
       villageCore.set(isl.child.id, { x: isl.footprint.bx + half, y: isl.footprint.by + half, r: half });
@@ -430,8 +452,7 @@ export class Renderer {
     const seedX = (seedH % 997) * 3.17;
     const seedY = ((seedH >>> 10) % 991) * 2.71;
 
-    for (const { i, j, type, water } of cells) {
-      if (water) continue;
+    for (const { i, j, type } of cells) {
       const hash = ((Math.imul(i + 1, 73856093) ^ Math.imul(j + 1, 19349663) ^ Math.imul(v.depth + 7, 83492791)) >>> 0) % 1000;
       if (type === 'island' || type === 'coast' || type === 'village' || type === 'port' || type === 'tree') {
         const kind = type === 'coast' || type === 'port' ? 'sand' : 'grass';
@@ -441,52 +462,65 @@ export class Renderer {
           if (kind === 'grass' && n === 'sand') return Edge.Sand;
           return Edge.None;
         });
-        layer.addChild(this.groundSprite(kit.ground(kind, hash, edges), i, j));
+        // Shore art (whole tiles with water, foam and sand) when it exists, picked from which neighbours are water.
+        let shoreKey: string | null = null;
+        if (hasShoreArt) {
+          if (kind === 'sand') {
+            const dirs = ['e', 's', 'w', 'n'].filter((_, s) => edges[s] === Edge.Water);
+            const has = (d: string) => dirs.includes(d);
+            if (dirs.length === 0) shoreKey = innerCorner(i, j) ? 'shore.inner.' + innerCorner(i, j) : 'shore.sand';
+            else if (dirs.length === 1) shoreKey = 'shore.edge.' + dirs[0];
+            else if (dirs.length === 2 && has('n') !== has('s')) shoreKey = `shore.outer.${has('n') ? 'n' : 's'}${has('w') ? 'w' : 'e'}`;
+            else shoreKey = 'shore.water'; // a one-cell spit of sand between waters: let the sea have it
+          } else if (type === 'island' || type === 'tree') {
+            const corner = innerCorner(i, j);
+            if (corner) shoreKey = 'shore.inner.' + corner;
+          }
+        }
+        const shoreTex = shoreKey ? kit.shore(shoreKey, hash) : null;
+        const ground = shoreTex ? this.groundSprite(shoreTex, i, j, 0.01) : this.groundSprite(kit.ground(kind, hash, edges), i, j);
+        if (kind === 'grass' && !shoreTex) {
+          // Low-frequency noise tint so big stretches of grass are not one flat colour.
+          const shade = 226 + Math.round(valueNoise(i * 0.09 + seedY, j * 0.09 + seedX) * 29);
+          ground.tint = (shade << 16) | (shade << 8) | shade;
+        }
+        layer.addChild(ground);
+        if (type === 'port') {
+          const dock = this.objectSprite(kit.port(hash), i + 0.5, j + 0.5);
+          decor.push({ gx: i + j + 0.5, gy: 0, sprite: dock });
+        }
         // Scenery on inland grass. Trees grow in clumps: a smooth noise field gives dense groves and open
         // meadows, and a second, larger field makes whole patches of conifers or leafy trees. A tree needs
         // grass all around it, so narrow shoreline strips never get one hanging over the water.
         const core = villageCore.get(grid[j][i].nodeId ?? '');
         const inVillageCore = !!core && Math.hypot(i + 0.5 - core.x, j + 0.5 - core.y) < core.r * 0.55;
-        const hasLake = lakeIslands.has(grid[j][i].nodeId ?? '');
-        if (kind === 'grass' && type === 'island' && !inVillageCore && !hasLake && edges.every((e) => e === Edge.None)) {
+        if (kind === 'grass' && !shoreTex && type === 'island' && !inVillageCore && edges.every((e) => e === Edge.None)) {
           const roll = hash / 1000;
           const grove = valueNoise(i * 0.24 + seedX, j * 0.24 + seedY);
           const patch = valueNoise(i * 0.11 + seedY, j * 0.11 + seedX);
-          let art: { texture: Texture; aspect: number } | null = null;
-          let widthInTiles = 0.7;
+          let art: Sprite3D | null = null;
+          let widthScale = 1;
           if (grove > 0.4 && roll < (grove - 0.28) * 2.2 && this.grassAround(grid, i, j, 1)) {
             const k = roll < 0.012 ? 'dead' : patch > 0.5 ? 'conifer' : 'leafy';
             art = kit.tree(k, hash);
-            widthInTiles = 0.7 + ((hash >> 3) % 9) * 0.04; // 0.7 - 1.0 tiles wide
+            widthScale = 0.9 + ((hash >> 3) % 9) * 0.04; // 0.9 - 1.2 of the art's width
           } else if (grove > 0.3 && roll > 0.965) {
             art = kit.tree('bush', hash);
-            widthInTiles = 0.42;
           } else if (hash % 13 === 0) {
             art = hash % 2 === 0 ? kit.rock(hash) : kit.tuft(hash);
-            widthInTiles = 0.34;
           }
           if (art) {
-            const sp = new Sprite(art.texture);
-            sp.anchor.set(0.5, 0.94);
-            sp.width = TILE_W * widthInTiles;
-            sp.height = sp.width / art.aspect;
+            const gx = i + 0.5 + (((hash >> 2) % 5) - 2) * 0.06;
+            const gy = j + 0.5 + (((hash >> 4) % 5) - 2) * 0.06;
+            const sp = this.objectSprite(art, gx, gy, widthScale, TILE_H * 0.3);
             if (hash % 2 === 1) sp.scale.x = -sp.scale.x; // mirror half of them: same tree, different look
             const shade = 232 + ((hash >> 5) % 24); // slight brightness variation
             sp.tint = (shade << 16) | (shade << 8) | shade;
-            const p = gridToScreen(i + 0.5 + (((hash >> 2) % 5) - 2) * 0.06, j + 0.5 + (((hash >> 4) % 5) - 2) * 0.06);
-            sp.position.set(p.x, p.y + TILE_H * 0.3);
-            decor.push({ gx: i + j, gy: 0, sprite: sp });
+            const sh = this.objectSprite(kit.shadow, gx, gy, (art.widthInTiles * widthScale * 0.9) / kit.shadow.widthInTiles, TILE_H * 0.3);
+            sh.alpha = 0.8;
+            decor.push({ gx: i + j, gy: 0, sprite: sp, shadow: sh });
           }
         }
-      } else if (type === 'coral') {
-        const id = grid[j][i].nodeId;
-        const outside = [0, 1, 2, 3].map((s) => {
-          const x = i + SIDE_DX[s];
-          const y = j + SIDE_DY[s];
-          return x < 0 || y < 0 || x >= GRID_SIZE || y >= GRID_SIZE || grid[y][x].nodeId !== id;
-        });
-        if (outside.some(Boolean)) diamond(rim, i, j).fill({ color: CORAL_BORDER, alpha: 0.4 });
-        for (const t of kit.coralPieces(outside)) layer.addChild(this.groundSprite(t, i, j));
       } else if (type === 'house') {
         const id = grid[j][i].nodeId ?? '';
         const h = houses.get(id) ?? { sx: 0, sy: 0, n: 0 };
@@ -536,9 +570,9 @@ export class Renderer {
       for (const p of picks) {
         let hv = 0;
         for (let k = 0; k < p.id.length; k++) hv = (hv * 31 + p.id.charCodeAt(k)) >>> 0;
-        const art = kit.village;
+        const art = kit.village(hv);
         const sp = new Sprite(art.texture);
-        sp.anchor.set(0.5, 0.6);
+        sp.anchor.set(art.anchor[0], art.anchor[1]);
         sp.width = TILE_W * width;
         sp.height = sp.width / art.aspect;
         if (hv % 2 === 1) sp.scale.x *= -1; // mirror every other village so they do not repeat
@@ -548,7 +582,10 @@ export class Renderer {
       }
     }
     decor.sort((a, b) => a.gx - b.gx);
-    for (const d of decor) layer.addChild(d.sprite);
+    for (const d of decor) {
+      if (d.shadow) layer.addChild(d.shadow);
+      layer.addChild(d.sprite);
+    }
 
     kit.flush();
   }
@@ -569,8 +606,7 @@ export class Renderer {
   }
 
   /** A square ground tile mapped onto its isometric diamond, slightly oversized to hide seams. */
-  private groundSprite(tex: Texture, gx: number, gy: number): Sprite {
-    const pad = 0.03;
+  private groundSprite(tex: Texture, gx: number, gy: number, pad = 0.03): Sprite {
     const sp = new Sprite(tex);
     const n = 1 + 2 * pad;
     const px = tex.width;
@@ -581,23 +617,20 @@ export class Renderer {
     return sp;
   }
 
-  /** A tiling water sheet covering `cells` x `cells` grid cells from (gx0, gy0); one texture tile spans 4 cells. */
-  private waterSheet(tex: Texture, gx0: number, gy0: number, cells: number): TilingSprite {
+  /**
+   * A tiling water sheet covering `cells` x `cells` grid cells from (gx0, gy0); one copy of the texture spans
+   * `tileCells` cells, lined up with the grid so per-cell water art meets the shore tiles exactly.
+   */
+  private waterSheet(tex: Texture, gx0: number, gy0: number, cells: number, tileCells = 4): TilingSprite {
     const PX_PER_CELL = 64;
     const size = cells * PX_PER_CELL;
     const sheet = new TilingSprite({ texture: tex, width: size, height: size });
+    sheet.tileScale.set((PX_PER_CELL * tileCells) / tex.width);
     const a = TILE_W / 2 / PX_PER_CELL;
     const b = TILE_H / 2 / PX_PER_CELL;
     const o = gridToScreen(gx0, gy0);
     sheet.setFromMatrix(new Matrix(a, b, -a, b, o.x, o.y));
     return sheet;
-  }
-
-  /** Does this tile touch a different node (or the grid edge)? Used for a coral's red border. */
-  private isEdgeOfRegion(grid: Grid, x: number, y: number): boolean {
-    const id = grid[y][x].nodeId;
-    const near = neighbors(x, y);
-    return near.length < 4 || near.some(([nx, ny]) => grid[ny][nx].nodeId !== id);
   }
 
   /** Is the view's grid footprint within the viewport? (generous bounding box) */
@@ -619,6 +652,7 @@ export class Renderer {
 
   /** Camera-zoom gate: level `depth` detail fades in at its own zoom, like map layers. */
   private depthT(depth: number): number {
+    if (depth <= 1) return 1; // top-level folders are already split into clusters at the home zoom
     const k = this.world.scale.x / this.fit;
     return clamp01((k - (DEPTH_ZOOM_START + (depth - 1) * DEPTH_ZOOM_STEP)) / DEPTH_FADE);
   }
@@ -634,13 +668,27 @@ export class Renderer {
     v.label.scale.set(1 / this.world.scale.x);
   }
 
+  /** Labels that would overlap a bigger island's label (bigger view first) are hidden at the current zoom. */
+  private hideOverlappingLabels(): void {
+    const sc = this.world.scale.x;
+    const shown: { x0: number; y0: number; x1: number; y1: number }[] = [];
+    const byImportance = this.labelViews.filter((v) => v.label?.visible && v.labelSize).sort((a, b) => b.f - a.f || a.depth - b.depth);
+    for (const v of byImportance) {
+      const l = v.label!;
+      const { w, h } = v.labelSize!;
+      const cx = this.world.position.x + sc * l.position.x;
+      const cy = this.world.position.y + sc * l.position.y;
+      const box = { x0: cx - w / 2 - 4, y0: cy - h / 2 - 2, x1: cx + w / 2 + 4, y1: cy + h / 2 + 2 };
+      if (shown.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0)) l.visible = false;
+      else shown.push(box);
+    }
+  }
+
   /** Create, show, fade and hide views for the current camera. Called whenever the camera moves. */
   private updateView(v: View): void {
     if (!v.drawn) this.drawView(v);
     v.gfx.alpha = v.alpha;
     v.layer.alpha = v.alpha;
-    // The pink rim gives a coral border body at small scale; up close the coral art carries it alone.
-    if (v.rim) v.rim.alpha = 1 - clamp01((this.world.scale.x / this.fit - 1.3) / 1.0);
     this.updateLabel(v);
     for (const isl of this.islandsOf(v)) {
       const fk = v.f * isl.footprint.s;
@@ -662,6 +710,28 @@ export class Renderer {
       kid.container.visible = true;
       this.updateView(kid);
     }
+    for (const isl of v.pending) this.requestChildren(v, isl);
+  }
+
+  /** Ask the lazy loader for a visible, still-empty file's children (once per node). */
+  private requestChildren(v: View, isl: Island): void {
+    const load = this.loadChildren;
+    const node = isl.child;
+    if (!load || this.requested.has(node.id)) return;
+    const fk = v.f * isl.footprint.s;
+    const o = gridToScreen(isl.footprint.bx, isl.footprint.by);
+    if (!(this.alphaFor(v.depth + 1, fk) > 0 && this.onScreen(fk, v.ox + v.f * o.x, v.oy + v.f * o.y))) return;
+    this.requested.add(node.id);
+    const generation = this.root;
+    void load(node)
+      .then((ok) => {
+        if (!ok || this.root !== generation || node.children.length === 0) return;
+        forgetNode(node); // its memoised effective children / height are now stale
+        this.gridCache.delete(node.id);
+        v.islands = null; // recompute so the file becomes a zoomable island
+        this.refresh();
+      })
+      .catch(() => {});
   }
 
   /** Hide a view, its descendants and their labels. */
@@ -674,6 +744,7 @@ export class Renderer {
   private refresh(): void {
     if (!this.root) return;
     this.updateView(this.root);
+    this.hideOverlappingLabels();
     this.updateChain();
     this.refreshHover();
   }
@@ -742,7 +813,7 @@ export class Renderer {
     // `fit` stays "the whole grid fills the screen": every zoom threshold is measured against it.
     this.fit = Math.min(w / worldW, h / worldH) * 0.9;
 
-    // The opening view is framed on the land itself, so islands are not lost in empty ocean.
+    // The opening view is framed on the territories (land and the water round it), so clusters are not lost in empty ocean.
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
@@ -751,7 +822,7 @@ export class Renderer {
     if (grid) {
       for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
-          if (grid[y][x].type === 'ocean') continue;
+          if (grid[y][x].type === 'ocean' && !grid[y][x].nodeId) continue; // territory water counts
           for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
             const p = gridToScreen(x + dx, y + dy);
             minX = Math.min(minX, p.x);

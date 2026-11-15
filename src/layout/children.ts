@@ -42,7 +42,8 @@ export function effectiveChildren(node: RepoNode): RepoNode[] {
     const village: RepoNode = {
       id,
       kind: 'folder',
-      name: 'files',
+      name: node.name, // the home islet is named after its folder
+
       path: id,
       size: loose.reduce((a, c) => a + c.size, 0),
       children: loose,
@@ -53,4 +54,10 @@ export function effectiveChildren(node: RepoNode): RepoNode[] {
   }
   effective.set(node, out);
   return out;
+}
+
+/** Drop a node's memoised height and effective children after its `children` were replaced (lazy loading). */
+export function forgetNode(node: RepoNode): void {
+  heights.delete(node);
+  effective.delete(node);
 }

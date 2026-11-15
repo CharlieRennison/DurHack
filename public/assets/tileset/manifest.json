@@ -1,0 +1,147 @@
+{
+  "water.shallow": [
+    {
+      "file": "water/shallow.png",
+      "cells": 1
+    }
+  ],
+  "water.deep": [
+    {
+      "file": "water/deep.png",
+      "cells": 1
+    }
+  ],
+  "water.reef": [
+    {
+      "file": "water/reef.png",
+      "cells": 1
+    }
+  ],
+  "shore.water": [
+    {
+      "file": "shore/water.png"
+    }
+  ],
+  "shore.sand": [
+    {
+      "file": "shore/sand.png"
+    }
+  ],
+  "ground.sand": [
+    {
+      "file": "shore/sand.png"
+    }
+  ],
+  "shore.edge.n": [
+    {
+      "file": "shore/edge_n_0.png",
+      "weight": 3
+    },
+    {
+      "file": "shore/edge_n_1.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_n_2.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_n_3.png",
+      "weight": 1
+    }
+  ],
+  "shore.edge.e": [
+    {
+      "file": "shore/edge_e_0.png",
+      "weight": 3
+    },
+    {
+      "file": "shore/edge_e_1.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_e_2.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_e_3.png",
+      "weight": 1
+    }
+  ],
+  "shore.edge.s": [
+    {
+      "file": "shore/edge_s_0.png",
+      "weight": 3
+    },
+    {
+      "file": "shore/edge_s_1.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_s_2.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_s_3.png",
+      "weight": 1
+    }
+  ],
+  "shore.edge.w": [
+    {
+      "file": "shore/edge_w_0.png",
+      "weight": 3
+    },
+    {
+      "file": "shore/edge_w_1.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_w_2.png",
+      "weight": 1
+    },
+    {
+      "file": "shore/edge_w_3.png",
+      "weight": 1
+    }
+  ],
+  "shore.outer.nw": [
+    {
+      "file": "shore/outer_nw.png"
+    }
+  ],
+  "shore.outer.ne": [
+    {
+      "file": "shore/outer_ne.png"
+    }
+  ],
+  "shore.outer.se": [
+    {
+      "file": "shore/outer_se.png"
+    }
+  ],
+  "shore.outer.sw": [
+    {
+      "file": "shore/outer_sw.png"
+    }
+  ],
+  "shore.inner.nw": [
+    {
+      "file": "shore/inner_nw.png"
+    }
+  ],
+  "shore.inner.ne": [
+    {
+      "file": "shore/inner_ne.png"
+    }
+  ],
+  "shore.inner.se": [
+    {
+      "file": "shore/inner_se.png"
+    }
+  ],
+  "shore.inner.sw": [
+    {
+      "file": "shore/inner_sw.png"
+    }
+  ]
+}

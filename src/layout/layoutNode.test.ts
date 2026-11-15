@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { effectiveChildren, folderHeight } from './children';
-import { layoutNode } from './layoutNode';
-import { GRID_SIZE, MAX_ISLAND_DEPTH, type RepoNode } from '../types';
+import { layoutNode, MIN_ISLET_SEPARATION, MIN_ISLET_SIZE } from './layoutNode';
+import { GRID_SIZE, MAX_ISLAND_DEPTH, type Grid, type RepoNode, type Tile } from '../types';
 
 const mk = (id: string, size: number, children: RepoNode[] = []): RepoNode => ({
   id, kind: 'folder', name: id, path: id, size, children,
@@ -20,18 +20,84 @@ describe('layoutNode', () => {
   });
 });
 
-describe('island spacing', () => {
-  it('keeps open water between different islands', () => {
-    const g = layoutNode(root, 0);
-    for (let y = 0; y < GRID_SIZE; y++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
-        const a = g[y][x].nodeId;
-        if (!a) continue;
-        for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
-          const b = g[y + dy]?.[x + dx]?.nodeId;
-          expect(b === undefined || b === a).toBe(true);
+const isLand = (t: Tile) => t.type === 'island' || t.type === 'coast' || t.type === 'house';
+/** Land cells of one child (its islet), as [x, y]. */
+const isletOf = (g: Grid, id: string): [number, number][] => {
+  const out: [number, number][] = [];
+  g.forEach((row, y) => row.forEach((t, x) => { if (t.nodeId === id && isLand(t)) out.push([x, y]); }));
+  return out;
+};
+/** Number of 4-connected pieces of a cell list. */
+const pieces = (cells: [number, number][]): number => {
+  const left = new Set(cells.map(([x, y]) => y * 100 + x));
+  let n = 0;
+  while (left.size) {
+    n++;
+    const stack = [left.values().next().value as number];
+    left.delete(stack[0]);
+    while (stack.length) {
+      const k = stack.pop()!;
+      for (const d of [1, -1, 100, -100]) if (left.delete(k + d)) stack.push(k + d);
+    }
+  }
+  return n;
+};
+/** A folder of `n` sub-folders that each hold a file (so each is an island, not a village). */
+const cluster = (n: number): RepoNode =>
+  mk('r' + n, 100, Array.from({ length: n }, (_, i) => mk('r' + n + '/k' + i, 20 + (i % 5) * 10, [file('r' + n + '/k' + i + '/f', 3)])));
+const kidsOf = (r: RepoNode) => effectiveChildren(r);
+
+describe('islets and territories', () => {
+  for (const n of [3, 10, 50]) {
+    describe(n + ' children', () => {
+      const r = cluster(n);
+      const g = layoutNode(r, 0);
+      it('gives every child an islet of at least the minimum size, in one piece', () => {
+        for (const k of kidsOf(r)) {
+          const cells = isletOf(g, k.id);
+          expect(cells.length, k.id).toBeGreaterThanOrEqual(MIN_ISLET_SIZE);
+          expect(pieces(cells), k.id).toBe(1);
         }
-      }
+      });
+      it('wraps every islet in shallow territory water carrying the child id', () => {
+        for (const k of kidsOf(r)) {
+          const ring = g.flat().filter((t) => t.nodeId === k.id && t.type === 'ocean');
+          expect(ring.length, k.id).toBeGreaterThan(0);
+          expect(ring.every((t) => t.variant === 1), k.id).toBe(true);
+        }
+      });
+      it('keeps different islets at least the separation apart', () => {
+        const owners = kidsOf(r).map((k) => isletOf(g, k.id));
+        for (let a = 0; a < owners.length; a++) {
+          for (let b = a + 1; b < owners.length; b++) {
+            for (const [ax, ay] of owners[a]) {
+              for (const [bx, by] of owners[b]) {
+                if (Math.max(Math.abs(ax - bx), Math.abs(ay - by)) < MIN_ISLET_SEPARATION) throw new Error(`islets ${a} and ${b} touch`);
+              }
+            }
+          }
+        }
+      });
+    });
+  }
+  it('is deterministic for a big cluster', () => {
+    expect(layoutNode(cluster(10), 0)).toEqual(layoutNode(cluster(10), 0));
+  });
+  it('uses deep water between root clusters and shallow water between islets inside a territory', () => {
+    const allowed = Array.from({ length: GRID_SIZE }, (_, y) => Array.from({ length: GRID_SIZE }, (_, x) => x >= 6 && x < 40 && y >= 6 && y < 40));
+    const inner = layoutNode(cluster(3), 0, allowed);
+    expect(inner[20][2].variant).toBe(0); // outside the territory
+    const open = inner.flat().filter((t, i) => !t.nodeId && allowed[(i / GRID_SIZE) | 0][i % GRID_SIZE]);
+    expect(open.every((t) => t.variant === 1)).toBe(true);
+    expect(layoutNode(cluster(3), 0).flat().filter((t) => !t.nodeId).every((t) => t.variant === 0)).toBe(true);
+  });
+  it('lands in the target share of the territory for 3, 10 and 50 children', () => {
+    const allowed = Array.from({ length: GRID_SIZE }, (_, y) => Array.from({ length: GRID_SIZE }, (_, x) => x >= 4 && x < 44 && y >= 4 && y < 44));
+    for (const [n, lo, hi] of [[3, 0.3, 0.6], [10, 0.3, 0.6], [50, 0.2, 0.6]] as const) {
+      const g = layoutNode(cluster(n), 0, allowed);
+      const share = g.flat().filter(isLand).length / (40 * 40);
+      expect(share, n + ' children: ' + share.toFixed(2)).toBeGreaterThanOrEqual(lo);
+      expect(share, n + ' children: ' + share.toFixed(2)).toBeLessThanOrEqual(hi);
     }
   });
 });
@@ -57,7 +123,8 @@ const file = (id: string, size = 5): RepoNode => ({ id, kind: 'file', name: id, 
 /** A chain of folders: chain('x', 3) -> x0 > x1 > x2 > (leaf folder holding one file). */
 const chain = (name: string, levels: number): RepoNode =>
   levels === 0 ? mk(name, 5, [file(name + '.txt')]) : mk(name, 5, [chain(name + 'i', levels - 1)]);
-const typesOf = (parent: RepoNode, id: string) => new Set(layoutNode(parent, 0).flat().filter((t) => t.nodeId === id).map((t) => t.type));
+/** Land tile types of a child on its parent's grid (the shallow ring round it is not counted). */
+const typesOf = (parent: RepoNode, id: string) => new Set(layoutNode(parent, 0).flat().filter((t) => t.nodeId === id && t.type !== 'ocean').map((t) => t.type));
 
 describe('sub-folder depth (height)', () => {
   it('is 0 for a folder of only files and grows with nested folders', () => {
@@ -81,10 +148,11 @@ describe('what each folder becomes', () => {
       expect(typesOf(parent, 'c'), 'height ' + h).toEqual(new Set(['island', 'coast']));
     }
   });
-  it('MAX_ISLAND_DEPTH or more levels below is coral with no coast ring', () => {
+  it('even very deep folders are plain islands: there is no coral', () => {
     for (const h of [MAX_ISLAND_DEPTH, MAX_ISLAND_DEPTH + 2]) {
       const parent = mk('p', 10, [chain('c', h), chain('d', 0)]);
-      expect(typesOf(parent, 'c'), 'height ' + h).toEqual(new Set(['coral']));
+      expect(typesOf(parent, 'c'), 'height ' + h).toEqual(new Set(['island', 'coast']));
+      expect(layoutNode(parent, 0).flat().some((t) => t.type === 'coral' || t.variant === 2)).toBe(false);
     }
   });
 });
@@ -111,5 +179,28 @@ describe('island size follows how many things must fit inside', () => {
     const g = layoutNode(mk('r', 10, [many, few]), 0).flat();
     const area = (id: string) => g.filter((t) => t.nodeId === id).length;
     expect(area('many')).toBeGreaterThan(area('few'));
+  });
+});
+
+describe('home islet', () => {
+  const sub = (n: number) => mk('h/s' + n, 20 + n * 10, [file('h/s' + n + '/f', 3)]);
+  const home = mk('h', 100, [sub(1), sub(2), sub(3), sub(4), sub(5), file('h/a.txt', 500), file('h/b.txt', 500)]);
+  const kids = effectiveChildren(home);
+  const homeKid = kids.find((k) => k.id.endsWith('#files'))!;
+  it('is named after its folder, not "files"', () => {
+    expect(homeKid.name).toBe('h');
+  });
+  it('is the islet nearest the middle of the territory, at the root and inside a territory', () => {
+    const allowed = Array.from({ length: GRID_SIZE }, (_, y) => Array.from({ length: GRID_SIZE }, (_, x) => x >= 6 && x < 40 && y >= 6 && y < 40));
+    for (const [g, c] of [[layoutNode(home, 0), 23.5], [layoutNode(home, 0, allowed), 22.5]] as const) {
+      const dist = (id: string) => {
+        const cells = isletOf(g, id);
+        const cx = cells.reduce((a, p) => a + p[0], 0) / cells.length;
+        const cy = cells.reduce((a, p) => a + p[1], 0) / cells.length;
+        return Math.hypot(cx - c, cy - c);
+      };
+      const d = dist(homeKid.id);
+      for (const k of kids) if (k !== homeKid) expect(d, k.id).toBeLessThanOrEqual(dist(k.id));
+    }
   });
 });

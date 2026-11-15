@@ -29,3 +29,40 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b2a4a; fon
   background: rgba(10, 20, 35, 0.8); border-radius: 6px; font: 600 15px system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
+
+#gh-form { display: flex; gap: 4px; align-items: stretch; pointer-events: auto; }
+#gh-form input, #gh-form button {
+  background: rgba(10, 20, 35, 0.8); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px; padding: 6px 8px; font: 14px system-ui, sans-serif;
+}
+#gh-input { width: 220px; }
+#gh-form button { cursor: pointer; font-weight: 600; }
+#gh-form button:hover:not(:disabled) { border-color: #8fd0ff; }
+#gh-form :disabled { opacity: 0.6; cursor: progress; }
+#live-status {
+  position: absolute; top: 52px; left: 12px; max-width: 560px; padding: 6px 10px;
+  background: rgba(10, 20, 35, 0.8); border-radius: 6px; font-size: 13px; line-height: 1.4;
+}
+#live-status.error { color: #ffb4b4; border: 1px solid rgba(255, 120, 120, 0.5); }
+#live-status.warn { color: #ffe08a; }
+
+#settings { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: auto; }
+#settings button {
+  background: rgba(10, 20, 35, 0.8); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px; padding: 6px 10px; font: 600 14px system-ui, sans-serif; cursor: pointer;
+}
+#settings button:hover { border-color: #8fd0ff; }
+#settings-btn { font-size: 18px; line-height: 1; }
+#settings-panel {
+  width: 260px; padding: 10px 12px; background: rgba(10, 20, 35, 0.9); border-radius: 6px;
+  font-size: 13px; line-height: 1.4; box-sizing: border-box;
+}
+#settings-panel label { display: block; font-weight: 600; margin-bottom: 4px; }
+#settings-panel input {
+  width: 100%; box-sizing: border-box; background: rgba(255, 255, 255, 0.08); color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 6px; padding: 6px 8px; font: 13px system-ui, sans-serif;
+}
+#settings-panel .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+#settings-panel .row button { font-size: 13px; padding: 4px 10px; }
+#settings-panel p { margin: 8px 0 0; }
+#settings .dim { opacity: 0.6; font-weight: 400; }

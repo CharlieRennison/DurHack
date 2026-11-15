@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { buildTree } from '../buildTree';
 import { IGNORE } from '../ignore';
+import { parseRepoUrl } from '../repoUrl';
 import type { Manifest, ManifestEntry } from '../manifest';
 
 interface Args {
@@ -34,11 +35,9 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
-/** Accepts https://github.com/o/r(.git)(/tree/<ref>) or "o/r". */
-export function parseRepoUrl(input: string): { owner: string; repo: string; ref?: string; cloneUrl: string } {
-  const m = /^(?:https?:\/\/github\.com\/)?([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/tree\/([^?#]+))?\/?$/.exec(input.trim());
-  if (!m) throw new Error(`Cannot parse repo URL: ${input}`);
-  const [, owner, repo, ref] = m;
+/** Parses a GitHub link via the shared browser-safe parser and adds the clone URL. */
+function parseRepo(input: string): { owner: string; repo: string; ref?: string; cloneUrl: string } {
+  const { owner, repo, ref } = parseRepoUrl(input);
   return { owner, repo, ref, cloneUrl: `https://github.com/${owner}/${repo}.git` };
 }
 
@@ -48,7 +47,7 @@ function git(args: string[], cwd?: string): string {
 
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
-  const parsed = parseRepoUrl(args.url);
+  const parsed = parseRepo(args.url);
   const ref = args.ref ?? parsed.ref;
   const id = `${parsed.owner}__${parsed.repo}`;
 
